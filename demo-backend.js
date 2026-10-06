@@ -114,7 +114,7 @@ async function loadSql() {
   return SQL;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const MIGRATIONS = {
   1: `
@@ -165,7 +165,7 @@ const MIGRATIONS = {
     porterage INTEGER NOT NULL,
     cash_advance INTEGER NOT NULL DEFAULT 0,
     fee_total INTEGER NOT NULL,
-    payable INTEGER NOT NULL,                  -- üreticiye borcumuz = tutar - komisyon
+    payable INTEGER NOT NULL,                  -- üreticiye ödenecek (bkz. porter_deducted)
     cancelled_at TEXT,
     cancel_reason TEXT
   );
@@ -238,6 +238,11 @@ const MIGRATIONS = {
     reason TEXT,
     hash TEXT NOT NULL
   );
+  `,
+
+  // 2: Hamallık artık üreticiye ödenecek tutardan düşülüyor. Önceki fişler kesildikleri kuralla kalır (0).
+  2: `
+  ALTER TABLE receipts ADD COLUMN porter_deducted INTEGER NOT NULL DEFAULT 0;
   `,
 };
 
@@ -820,7 +825,9 @@ class Service {
     need(cash >= 0, 'Elden tutarı eksi olamaz.');
     const rate = original ? original.commission_rate : Number(this.getSetting('commission_rate'));
     const fee = original ? original.porter_fee : Number(this.getSetting('porter_fee'));
-    const calc = Calc.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: cash });
+    // Hamallık üreticiden kesilir; eski kuralla kesilmiş bir fiş düzeltilirken kendi kuralı korunur.
+    const porterDeducted = original ? !!original.porter_deducted : true;
+    const calc = Calc.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: cash, porterDeducted });
     return { customer, calc };
   }
 
@@ -863,9 +870,9 @@ class Service {
     return this.tx(() => {
       const at = this.now();
       const id = this.run(`INSERT INTO receipts(customer_id, customer_name, customer_address, created_at, commission_rate, porter_fee,
-        total_bags, total_kg, total_amount, commission, porterage, cash_advance, fee_total, payable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        total_bags, total_kg, total_amount, commission, porterage, cash_advance, fee_total, payable, porter_deducted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [customer.id, fullName(customer), customer.address, at, calc.commissionRate, calc.porterFee, calc.totalBags, calc.totalKg,
-        calc.totalAmount, calc.commission, calc.porterage, calc.cashAdvance, calc.feeTotal, calc.payable]);
+        calc.totalAmount, calc.commission, calc.porterage, calc.cashAdvance, calc.feeTotal, calc.payable, calc.porterDeducted ? 1 : 0]);
       this.insertItems(id, calc.items);
       this.applyStock(id, Service.bagsByProduct(calc.items, 1), 'fis', `Fiş ${id}`);
       if (calc.cashAdvance > 0) {
@@ -1069,8 +1076,8 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.1';
-  const STORE_KEY = 'fh-demo-db-v1';
+  const VERSION = '1.0.2';
+  const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
   let service = null;

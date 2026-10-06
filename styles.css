@@ -230,6 +230,7 @@ table.fis-in tr.sum td { border-bottom: 1.5px solid var(--blue); height: 46px; }
 table.fis-in tr.sum td.lbl { color: var(--blue); font-size: 1.1rem; font-family: "Arial Narrow", Arial, sans-serif; padding-left: 10px; }
 table.fis-in tr.sum.total td { background: #f6f7fd; }
 table.fis-in tr.sum.total td.lbl { font-weight: 700; }
+table.fis-in tr.sum.odenecek td { border-top: 2px solid var(--blue); font-size: 1.08rem; }
 table.fis-in input, table.fis-in select { border: 1px solid transparent; background: transparent; min-height: 42px; padding: 6px 8px; border-radius: 6px; }
 table.fis-in input:hover, table.fis-in select:hover { border-color: var(--line-strong); background: #fff; }
 table.fis-in input:focus, table.fis-in select:focus { border-color: var(--green-600); background: #fff; }

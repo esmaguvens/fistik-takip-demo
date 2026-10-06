@@ -95,12 +95,13 @@
       h('div', { class: 'kv' },
         h('div', { class: 'k' }, 'Toplam tutar'), h('div', { class: 'v' }, money(r.total_amount)),
         h('div', { class: 'k' }, 'Komisyon (%' + String(r.commission_rate).replace('.', ',') + ')'), h('div', { class: 'v' }, '− ', money(r.commission)),
+        r.porter_deducted ? [h('div', { class: 'k' }, 'Hamallık (' + C.formatInt(r.total_bags) + ' çuval)'), h('div', { class: 'v' }, '− ', money(r.porterage))] : null,
         h('div', { class: 'sep' }),
         h('div', { class: 'k' }, h('b', null, 'Üreticiye ödenecek')), h('div', { class: 'v big' }, money(r.payable)),
         h('div', { class: 'k' }, 'Ödenen'), h('div', { class: 'v pos' }, money(r.paid)),
         h('div', { class: 'k' }, 'Kalan'), h('div', { class: 'v big ' + (r.remaining ? 'neg' : '') }, money(r.remaining)),
         h('div', { class: 'sep' }),
-        h('div', { class: 'k' }, 'Hamallık (bizim masrafımız)'), h('div', { class: 'v' }, money(r.porterage)),
+        r.porter_deducted ? null : [h('div', { class: 'k' }, 'Hamallık (eski kural: kesilmedi)'), h('div', { class: 'v' }, money(r.porterage))],
         h('div', { class: 'k' }, 'Elden (müşteri borcuna eklendi)'), h('div', { class: 'v' }, money(r.cash_advance))),
       r.customer ? h('p', { style: { marginTop: '12px' } }, 'Müşteri: ', h('a', { href: '#/musteri/' + r.customer.id }, r.customer.full_name)) : null);
 

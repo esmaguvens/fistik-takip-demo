@@ -43,6 +43,9 @@
   .fis-table tr.item.last td{border-bottom:.45mm solid #27318f;}
   .fis-table tr.sum td{height:9.2mm;border-bottom:.35mm solid #27318f;}
   .fis-table tr.sum td.lbl{font-size:13pt;color:#27318f;font-family:"Arial Narrow",Arial,sans-serif;}
+  .fis-table tr.sum.odenecek td{border-top:.5mm solid #27318f;}
+  .fis-table tr.sum.odenecek td.lbl{font-weight:700;}
+  .fis-table tr.sum.odenecek td.num b{font-size:12.5pt;}
   .fis-table td.num{text-align:right;}
   .fis-table td.name{font-weight:600;white-space:normal;font-size:10pt;line-height:1.1;word-break:break-word;}
   .fis-alt{display:flex;justify-content:space-between;font-size:8pt;color:#27318f;margin-top:1.5mm;}
@@ -72,8 +75,8 @@
       `<td class="num">${esc(Calc.formatMoney(it.amount))}</td></tr>`;
   }
 
-  function sumRow(label, kgCell, priceCell, amountCell) {
-    return `<tr class="sum"><td class="lbl" colspan="2">${esc(label)}</td>` +
+  function sumRow(label, kgCell, priceCell, amountCell, extraClass) {
+    return `<tr class="sum${extraClass ? ' ' + extraClass : ''}"><td class="lbl" colspan="2">${esc(label)}</td>` +
       `<td class="num">${esc(kgCell)}</td><td class="num">${esc(priceCell)}</td>` +
       `<td class="num"><b>${esc(amountCell)}</b></td></tr>`;
   }
@@ -94,7 +97,8 @@
           Calc.formatMoney(r.porter_fee), Calc.formatMoney(r.porterage));
         body += sumRow('Elden', '', '', r.cash_advance ? Calc.formatMoney(r.cash_advance) : '');
         body += sumRow('TOPLAM', '', '', Calc.formatMoney(r.fee_total));
-        body += sumRow('', '', '', '');
+        // En alt satır: üreticiye ödenecek tutar (Toplam tutar − Komisyon − Hamallık)
+        body += sumRow('ÖDENECEK', '', '', Calc.formatMoney(r.payable), 'odenecek');
       } else {
         body += `<tr class="sum"><td class="lbl" colspan="5" style="text-align:center">Devamı sonraki sayfada</td></tr>`;
       }

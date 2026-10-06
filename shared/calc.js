@@ -118,9 +118,9 @@
   // items: [{ bags, kg, price }]  (price: kuruş / kg)
   // Tutar = KG × Fiyat
   // Komisyon = Toplam tutar × oran / 100
-  // Hamallık = Toplam adet × hamallık ücreti  (bizim masrafımız, üreticiden kesilmez)
+  // Hamallık = Toplam adet × hamallık ücreti
   // TOPLAM = Komisyon + Hamallık
-  // Üreticiye borcumuz = Toplam tutar − Komisyon   (Elden ayrı borç olarak tutulur)
+  // Üreticiye ödenecek = Toplam tutar − Komisyon − Hamallık   (Elden ayrı borç olarak tutulur)
   function computeReceipt(input) {
     const rate = Number(input.commissionRate) || 0;
     const fee = Math.round(Number(input.porterFee) || 0);
@@ -135,6 +135,8 @@
     const totalKg = roundKg(items.reduce((s, it) => s + it.kg, 0));
     const commission = round((totalAmount * rate) / 100);
     const porterage = totalBags * fee;
+    // Eski fişlerde (sürüm 1.0.1 ve öncesi) hamallık üreticiden kesilmiyordu; o fişler porterDeducted=false ile hesaplanır.
+    const porterDeducted = input.porterDeducted !== false;
     const cashAdvance = Math.max(0, Math.round(Number(input.cashAdvance) || 0));
     return {
       items,
@@ -147,7 +149,8 @@
       porterage,
       cashAdvance,
       feeTotal: commission + porterage,
-      payable: totalAmount - commission,
+      porterDeducted,
+      payable: totalAmount - commission - (porterDeducted ? porterage : 0),
     };
   }
 
