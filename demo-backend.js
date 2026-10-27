@@ -1125,7 +1125,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.8';
+  const VERSION = '1.0.9';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;

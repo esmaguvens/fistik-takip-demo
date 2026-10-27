@@ -49,6 +49,7 @@
   .fis-table td.num{text-align:right;}
   .fis-table td.name{font-weight:600;white-space:normal;font-size:10pt;line-height:1.1;word-break:break-word;}
   .fis-alt{display:flex;justify-content:space-between;font-size:8pt;color:#27318f;margin-top:1.5mm;}
+  .fis-yasal{font-size:8.5pt;color:#1a1a1a;}
   .fis-sheet{position:relative;overflow:hidden;background:#fff;page-break-after:always;break-after:page;}
   .fis-sheet:last-child{page-break-after:auto;break-after:auto;}
   .fis-sheet .fis-page{page-break-after:auto;break-after:auto;}
@@ -142,7 +143,7 @@
           <thead><tr><th>CİNSİ</th><th>ADET</th><th>KG</th><th>FİYATI</th><th>TUTARI</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
-        <div class="fis-alt"><span></span><span>${pages.length > 1 ? 'Sayfa ' + (pi + 1) + ' / ' + pages.length : ''}</span></div>
+        <div class="fis-alt"><span class="fis-yasal">Mali değeri yoktur – fatura yerine geçmez.</span><span>${pages.length > 1 ? 'Sayfa ' + (pi + 1) + ' / ' + pages.length : ''}</span></div>
       </div>`;
     });
   }
