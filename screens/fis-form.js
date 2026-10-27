@@ -315,6 +315,11 @@
       : h('h1', null, 'Yeni Fiş');
 
     const notices = [];
+    const clock = await UI.api('clockCheck');
+    if (!clock.ok) notices.push(((c) => h('div', { class: 'notice error' }, icon('alert', 24), h('div', { class: 'grow' },
+      h('b', null, 'Bilgisayarın tarihi veya saati geri gitmiş görünüyor. '),
+      'Son kayıt: ' + C.formatDateTime(c.latest) + ', bilgisayarın saati: ' + C.formatDateTime(c.now) + '. ' +
+      'Bu hâlde kesilen fişler yanlış tarihle ve yanlış ay klasörüne kaydedilir. Windows\'ta Ayarlar → Saat ve dil → Tarih ve saat bölümünden düzeltin.')))(clock));
     if (!products.length) {
       notices.push(h('div', { class: 'notice warn' }, icon('alert', 22), h('div', { class: 'grow' }, 'Henüz ürün eklenmemiş. Fiş kesmek için önce ürün ve fiyat ekleyin.'),
         btn('Ürünlere git', { kind: 'primary', onClick: () => { App.setLeaveGuard(null); App.go('#/urunler'); } })));

@@ -83,8 +83,39 @@
           h('h2', null, 'Giriş'),
           h('p', { class: 'muted' }, 'PIN kodunuzu girin'),
           status.note ? h('div', { class: 'notice warn', style: { textAlign: 'left' } }, icon('alert', 20), h('div', null, status.note)) : null,
-          pad));
+          pad,
+          h('button', { type: 'button', class: 'link-btn', onclick: forgotPin }, 'PIN\'imi unuttum')));
       keyHandler = pad.onKey;
+    }
+
+    // ---- PIN unutuldu: kurtarma koduyla yeni PIN ----
+    async function forgotPin() {
+      const code = codeInput();
+      const pinInput = () => h('input', { type: 'password', inputmode: 'numeric', maxlength: 6, autocomplete: 'off' });
+      const p1 = pinInput();
+      const p2 = pinInput();
+      const ok = await UI.modal({
+        title: 'PIN\'imi unuttum',
+        body: h('div', null,
+          h('p', null, 'Kurulumda verilen kurtarma kodunu girin ve yeni bir PIN belirleyin. Kayıtlarınız olduğu gibi kalır.'),
+          UI.field('Kurtarma kodu', code),
+          h('div', { class: 'row' }, UI.field('Yeni PIN (4-6 rakam)', p1), UI.field('Yeni PIN (tekrar)', p2))),
+        actions: [
+          { label: 'Vazgeç', value: null },
+          {
+            label: 'Yeni PIN\'i kaydet', kind: 'primary',
+            onClick: async () => {
+              if (p1.value !== p2.value) { toast('Yeni PIN\'ler aynı değil.', 'error'); return false; }
+              status = await UI.auth('resetPin', code.value, p1.value);
+              return true;
+            },
+          },
+        ],
+      });
+      if (ok) {
+        toast('PIN değiştirildi. Yeni PIN ile giriş yapın.');
+        showPin();
+      }
     }
 
     // ---- İlk kurulum ----

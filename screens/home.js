@@ -10,6 +10,10 @@ window.Screens.home = async function () {
     icon(ic, 34), h('div', null, h('div', { class: 't' }, title), h('div', { class: 'd' }, desc)));
 
   const notices = [];
+  if (d.clock && !d.clock.ok) notices.push(((c) => h('div', { class: 'notice error' }, icon('alert', 24), h('div', { class: 'grow' },
+      h('b', null, 'Bilgisayarın tarihi veya saati geri gitmiş görünüyor. '),
+      'Son kayıt: ' + C.formatDateTime(c.latest) + ', bilgisayarın saati: ' + C.formatDateTime(c.now) + '. ' +
+      'Bu hâlde kesilen fişler yanlış tarihle ve yanlış ay klasörüne kaydedilir. Windows\'ta Ayarlar → Saat ve dil → Tarih ve saat bölümünden düzeltin.')))(d.clock));
   if (d.stale_products.length) {
     notices.push(h('div', { class: 'notice warn' }, icon('alert', 24),
       h('div', { class: 'grow' }, h('b', null, 'Fiyat kontrolü: '), 'Şu ürünlerin fiyatı bugün güncellenmedi: ',

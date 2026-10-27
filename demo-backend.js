@@ -474,15 +474,30 @@ class Service {
   }
 
   // ---------- PIN / kurtarma kodu (şifreli veritabanının içinde saklanır) ----------
-  setPin(pin, isFirst) {
+  // kind: true (ilk kurulum) | 'sifirlandi' (kurtarma koduyla) | yok (PIN değiştirildi)
+  setPin(pin, kind) {
     need(/^\d{4,6}$/.test(String(pin)), 'PIN 4 ile 6 rakam arasında olmalı.');
     const salt = crypto.randomBytes(16);
     const hash = crypto.scryptSync(String(pin), salt, 32);
+    const AUDIT = {
+      kurulum: ['kurulum', 'Program kuruldu, PIN belirlendi'],
+      sifirlandi: ['pin_sifirlandi', 'PIN unutuldu; kurtarma koduyla yeni PIN belirlendi'],
+      degisti: ['pin_degisti', 'PIN değiştirildi'],
+    }[kind === true ? 'kurulum' : (kind || 'degisti')];
     return this.tx(() => {
       this.setSettingRaw('pin_salt', salt.toString('hex'));
       this.setSettingRaw('pin_hash', hash.toString('hex'));
-      this.audit(isFirst ? 'kurulum' : 'pin_degisti', 'guvenlik', null, isFirst ? 'Program kuruldu, PIN belirlendi' : 'PIN değiştirildi');
+      this.audit(AUDIT[0], 'guvenlik', null, AUDIT[1]);
     });
+  }
+
+  // PIN unutulduysa: kayıtlarla birlikte saklanan kurtarma kodu doğruysa yeni PIN belirlenir
+  resetPinWithCode(code, newPin) {
+    const norm = (c) => String(c || '').toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+    const saved = this.getRecoveryCode();
+    need(saved, 'Bu kayıtlarda kurtarma kodu bulunmuyor.');
+    need(norm(code).length === 20 && norm(code) === norm(saved), 'Kurtarma kodu yanlış.');
+    return this.setPin(newPin, 'sifirlandi');
   }
 
   hasPin() {
@@ -1045,6 +1060,18 @@ class Service {
     return { ok: true, count: rows.length };
   }
 
+  // ---------- bilgisayar saati ----------
+  // Bilgisayarın saati son kayıttan daha eskiyse (saat geri gitmişse) uyarı verilir;
+  // yoksa fişler yanlış tarihle ve yanlış ay klasörüne kaydedilir.
+  clockCheck() {
+    const now = this.now();
+    const row = this.get('SELECT MAX(at) AS v FROM audit_log');
+    const latest = row && row.v;
+    if (!latest) return { ok: true, now, latest: null };
+    const behind = Math.round((Date.parse(latest.replace(' ', 'T')) - Date.parse(now.replace(' ', 'T'))) / 60000);
+    return { ok: behind <= 10, now, latest, behind_minutes: behind };
+  }
+
   // ---------- ana sayfa özeti ----------
   dashboard() {
     const today = Calc.todayLocal();
@@ -1066,6 +1093,7 @@ class Service {
       customer_count: this.get('SELECT COUNT(*) AS n FROM customers WHERE deleted_at IS NULL').n,
       last_receipt_id: last ? last.id : null,
       recent: this.listReceipts({ limit: 8 }),
+      clock: this.clockCheck(),
     };
   }
 
@@ -1097,7 +1125,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.7';
+  const VERSION = '1.0.8';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
@@ -1245,7 +1273,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     'listProducts', 'getProduct', 'addProduct', 'renameProduct', 'updatePrice', 'priceHistory', 'adjustStock', 'deleteProduct',
     'listCustomers', 'getCustomer', 'addCustomer', 'updateCustomer', 'deleteCustomer', 'addAccountEntry', 'deleteAccountEntry',
     'listReceipts', 'getReceipt', 'createReceipt', 'updateReceipt', 'cancelReceipt', 'addPayment', 'deletePayment',
-    'stockMovements', 'listAudit', 'verifyAudit', 'dashboard', 'getSettings', 'saveSettings',
+    'stockMovements', 'listAudit', 'verifyAudit', 'dashboard', 'getSettings', 'saveSettings', 'clockCheck',
   ]);
 
   const status = () => ({
@@ -1259,6 +1287,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     status,
     login: (pin) => { if (!service.checkPin(pin)) throw new Error('PIN yanlış. Demo PIN: ' + DEMO_PIN); phase = 'unlocked'; return status(); },
     lock: () => { phase = 'locked'; return status(); },
+    resetPin: () => { throw new Error('Demo sürümünde PIN her zaman ' + DEMO_PIN + '.'); },
   };
 
   async function call(fn) {
