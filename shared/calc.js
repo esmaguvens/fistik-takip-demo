@@ -192,6 +192,9 @@
     return Math.round((b - a) / 86400000);
   }
 
+  // Firma adı programa sabitlenmiştir; ayarlardan değiştirilemez (program başka firma adına kullanılmasın diye).
+  const COMPANY_NAME = 'COŞKUN BAHAR TİCARET';
+
   // Müşteri hesabı hareket türleri. sign: +1 müşteri bize borçlanır, -1 borcu azalır / biz borçlanırız.
   // manual: kullanıcının elle girebildiği türler.
   const ENTRY_TYPES = {
@@ -205,7 +208,7 @@
   };
 
   return {
-    ENTRY_TYPES,
+    ENTRY_TYPES, COMPANY_NAME,
     parseNumber, toKurus, roundKg, formatMoney, formatKg, formatInt,
     nowLocal, todayLocal, formatDate, formatTime, formatDateTime,
     normalizeSearch, matches, computeReceipt, paymentStatus,

@@ -297,7 +297,7 @@ const crypto = require('crypto');
 const Calc = require('../shared/calc');
 
 const DEFAULT_SETTINGS = {
-  company_name: 'COŞKUN BAHAR TİCARET',
+  company_name: Calc.COMPANY_NAME,
   commission_rate: '2',
   porter_fee: '2000', // kuruş: 20,00 TL
   price_warn_days: '1',
@@ -410,6 +410,8 @@ class Service {
   }
 
   getSetting(key) {
+    // Firma adı veritabanından değil, programdaki sabitten gelir
+    if (key === 'company_name') return Calc.COMPANY_NAME;
     const r = this.get('SELECT value FROM settings WHERE key=?', [key]);
     return r ? r.value : null;
   }
@@ -436,8 +438,7 @@ class Service {
     const old = this.getSettings();
     const next = Object.assign({}, old);
     if (input.company_name !== undefined) {
-      next.company_name = cleanText(input.company_name, 80);
-      need(next.company_name, 'Firma adı boş olamaz.');
+      need(cleanText(input.company_name, 80) === Calc.COMPANY_NAME, 'Firma adı programa sabitlenmiştir; değiştirilemez.');
     }
     if (input.commission_rate !== undefined) {
       const v = Number(input.commission_rate);
@@ -1125,7 +1126,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.9';
+  const VERSION = '1.0.10';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;

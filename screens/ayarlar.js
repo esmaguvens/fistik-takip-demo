@@ -6,7 +6,6 @@ window.Screens.ayarlar = async function () {
   const [s, info] = await Promise.all([UI.api('getSettings'), UI.api('appInfo')]);
   const run = (fn) => async () => { try { await fn(); } catch (e) { UI.showError(e); } };
 
-  const company = h('input', { type: 'text', value: s.company_name, maxlength: 80 });
   const rate = numberInput({ kind: 'percent', value: s.commission_rate });
   const fee = numberInput({ kind: 'money', value: s.porter_fee });
   const warnDays = numberInput({ kind: 'int', value: s.price_warn_days });
@@ -18,7 +17,7 @@ window.Screens.ayarlar = async function () {
     const vals = { rate: rate.getValue(), fee: fee.getValue(), warn: warnDays.getValue(), lock: lockMin.getValue() };
     if (Object.values(vals).some((v) => v === null || Number.isNaN(v))) { toast('Tüm sayıları doğru yazın.', 'error'); return; }
     await UI.api('saveSettings', {
-      company_name: company.value, commission_rate: vals.rate, porter_fee: vals.fee,
+      commission_rate: vals.rate, porter_fee: vals.fee,
       price_warn_days: vals.warn, auto_lock_minutes: vals.lock, docs_dir: docsDir,
     });
     await App.loadSettings();
@@ -61,7 +60,10 @@ window.Screens.ayarlar = async function () {
       h('div', null,
         h('div', { class: 'card' },
           h('h2', null, 'Fiş'),
-          field('Firma adı (fişin üstünde yazar)', company),
+          h('div', { class: 'field' },
+            h('span', { class: 'field-label' }, 'Firma adı (fişin üstünde yazar)'),
+            h('div', { class: 'firma-sabit' }, UI.icon('lock', 16), h('span', null, window.Calc.COMPANY_NAME)),
+            h('span', { class: 'field-hint' }, 'Firma adı programa sabitlenmiştir; değiştirilemez.')),
           h('div', { class: 'row' },
             field('Komisyon oranı (%)', rate, 'Toplam tutar üzerinden'),
             field('Hamallık (TL / çuval)', fee, 'Her adet (çuval) için')),
@@ -75,7 +77,7 @@ window.Screens.ayarlar = async function () {
               if (d) { docsDir = d; docsPath.textContent = d; }
             }) }),
             btn('Klasörü aç', { kind: 'ghost', onClick: run(() => UI.api('openDocsDir')) })),
-          h('p', { class: 'muted', style: { fontSize: '.88rem', marginTop: '8px' } }, 'Değişikliği uygulamak için sağ üstteki "Kaydet"e basın. Dosyalar yıl klasörlerine ayrılır.'))),
+          h('p', { class: 'muted', style: { fontSize: '.88rem', marginTop: '8px' } }, 'Değişikliği uygulamak için sağ üstteki "Kaydet"e basın. Dosyalar yıl ve ay klasörlerine ayrılır.'))),
       h('div', null,
         h('div', { class: 'card' },
           h('h2', null, 'Uyarılar ve güvenlik'),
