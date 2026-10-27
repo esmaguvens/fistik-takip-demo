@@ -46,6 +46,16 @@ window.Screens.ayarlar = async function () {
     });
   }
 
+  const legal = h('div', { class: 'card legal', style: { marginTop: '18px' } },
+    h('h2', null, 'Yasal bilgilendirme'),
+    h('ul', { class: 'legal-list' },
+      h('li', null, 'Bu programda düzenlenen fişler ile programdan alınan PDF ve Excel çıktıları ', h('b', null, 'yalnızca işletme içi kayıt ve takip'), ' amaçlıdır.'),
+      h('li', null, 'Bu belgeler ', h('b', null, 'fatura, e-Fatura, e-Arşiv fatura, müstahsil makbuzu veya e-Müstahsil makbuzu yerine geçmez'), '; mali değeri yoktur ve vergi mevzuatı bakımından resmi belge niteliği taşımaz.'),
+      h('li', null, 'Yasal belgelerin düzenlenmesi ile stopaj, KDV ve diğer vergi yükümlülükleri bu programın dışında yerine getirilmelidir. Bu konularda mali müşavirinize danışın.'),
+      h('li', null, 'Komisyon, hamallık ve ödenecek tutar, girilen bilgilere ve bu sayfadaki ayarlara göre hesaplanır. Sonuçların kontrolü kullanıcının sorumluluğundadır.'),
+      h('li', null, 'Müşterilerin ad, telefon ve adres bilgileri 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) kapsamında kişisel veridir. Bu bilgileri yalnızca iş için gerekli olduğu kadar kaydedin; bilgisayara ve yedeklere yetkisiz erişimi engelleyin.'),
+      h('li', null, 'Kayıtlar yalnızca bu bilgisayarda tutulur. Yedeklerin düzenli alınması ve kurtarma kodunun güvenli bir yerde saklanması kullanıcının sorumluluğundadır.')));
+
   return UI.page('Ayarlar', [btn('Kaydet', { kind: 'primary', icon: 'save', onClick: run(save) })],
     h('div', { class: 'two-col' },
       h('div', null,
@@ -76,5 +86,6 @@ window.Screens.ayarlar = async function () {
           h('h2', null, 'Program bilgisi'),
           h('div', { class: 'kv' },
             h('div', { class: 'k' }, 'Sürüm'), h('div', { class: 'v' }, info.version),
-            h('div', { class: 'k' }, 'Veri klasörü'), h('div', { class: 'v', style: { fontWeight: 400, fontSize: '.85rem', wordBreak: 'break-all' } }, info.dataDir))))));
+            h('div', { class: 'k' }, 'Veri klasörü'), h('div', { class: 'v', style: { fontWeight: 400, fontSize: '.85rem', wordBreak: 'break-all' } }, info.dataDir))))),
+    legal);
 };

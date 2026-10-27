@@ -114,7 +114,7 @@ async function loadSql() {
   return SQL;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const MIGRATIONS = {
   1: `
@@ -244,6 +244,13 @@ const MIGRATIONS = {
   2: `
   ALTER TABLE receipts ADD COLUMN porter_deducted INTEGER NOT NULL DEFAULT 0;
   `,
+
+  // 3: Yıllar içinde büyüyen veride müşteri ve tarih aramaları için dizinler
+  3: `
+  CREATE INDEX IF NOT EXISTS ix_receipts_customer ON receipts(customer_id);
+  CREATE INDEX IF NOT EXISTS ix_receipts_created ON receipts(created_at);
+  CREATE INDEX IF NOT EXISTS ix_payments_customer ON payments(customer_id);
+  `,
 };
 
 async function openDatabase(bytes) {
@@ -299,6 +306,17 @@ const DEFAULT_SETTINGS = {
   backup_dir: '',
 };
 const PUBLIC_SETTINGS = Object.keys(DEFAULT_SETTINGS);
+
+// Bir fişe yapılmış (silinmemiş) ödemelerin toplamı. Fiş tablosu 'r' takma adıyla kullanılır.
+const PAID_SQL = '(SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.receipt_id = r.id AND p.deleted_at IS NULL)';
+// Durum süzgeçleri; Calc.paymentStatus ile aynı kurallar
+const STATUS_SQL = {
+  iptal: 'r.cancelled_at IS NOT NULL',
+  odendi: `r.cancelled_at IS NULL AND ${PAID_SQL} >= r.payable`,
+  odenmedi: `r.cancelled_at IS NULL AND r.payable > 0 AND ${PAID_SQL} <= 0`,
+  kismen: `r.cancelled_at IS NULL AND ${PAID_SQL} > 0 AND ${PAID_SQL} < r.payable`,
+  acik: `r.cancelled_at IS NULL AND ${PAID_SQL} < r.payable`,
+};
 
 function fail(message, code) {
   const e = new Error(message);
@@ -593,12 +611,14 @@ class Service {
   }
 
   // ---------- müşteriler ----------
-  customerBalances() {
-    const ours = this.all(`SELECT r.customer_id AS cid, SUM(r.payable - COALESCE(p.paid, 0)) AS v
-      FROM receipts r LEFT JOIN (SELECT receipt_id, SUM(amount) AS paid FROM payments WHERE deleted_at IS NULL GROUP BY receipt_id) p
-      ON p.receipt_id = r.id WHERE r.cancelled_at IS NULL GROUP BY r.customer_id`);
-    const theirs = this.all('SELECT customer_id AS cid, SUM(amount) AS v FROM account_entries WHERE deleted_at IS NULL GROUP BY customer_id');
-    const last = this.all('SELECT customer_id AS cid, MAX(created_at) AS v FROM receipts WHERE cancelled_at IS NULL GROUP BY customer_id');
+  // customerId verilirse yalnızca o müşteri hesaplanır (fiş ve müşteri sayfaları için hızlı)
+  customerBalances(customerId) {
+    const one = customerId ? ' AND r.customer_id = ?' : '';
+    const p = customerId ? [customerId] : [];
+    const ours = this.all(`SELECT r.customer_id AS cid, SUM(r.payable - ${PAID_SQL}) AS v
+      FROM receipts r WHERE r.cancelled_at IS NULL${one} GROUP BY r.customer_id`, p);
+    const theirs = this.all('SELECT customer_id AS cid, SUM(amount) AS v FROM account_entries WHERE deleted_at IS NULL' + (customerId ? ' AND customer_id = ?' : '') + ' GROUP BY customer_id', p);
+    const last = this.all('SELECT r.customer_id AS cid, MAX(r.created_at) AS v FROM receipts r WHERE r.cancelled_at IS NULL' + one + ' GROUP BY r.customer_id', p);
     const map = {};
     const slot = (cid) => (map[cid] = map[cid] || { unpaid_receipts: 0, account: 0, last_receipt_at: null });
     for (const r of ours) slot(r.cid).unpaid_receipts = r.v || 0;
@@ -635,7 +655,7 @@ class Service {
   }
 
   getCustomer(id) {
-    const c = this.withBalance(this.getCustomerRow(id), this.customerBalances()[id]);
+    const c = this.withBalance(this.getCustomerRow(id), this.customerBalances(id)[id]);
     c.receipts = this.listReceipts({ customerId: id, limit: 1000 });
     c.entries = this.all('SELECT * FROM account_entries WHERE customer_id=? ORDER BY at DESC, id DESC', [id])
       .map((e) => Object.assign(e, { label: (Calc.ENTRY_TYPES[e.type] || {}).label || e.type }));
@@ -744,14 +764,6 @@ class Service {
   }
 
   // ---------- fişler ----------
-  paidMap(ids) {
-    const map = {};
-    if (!ids.length) return map;
-    const rows = this.all(`SELECT receipt_id, SUM(amount) AS paid FROM payments WHERE deleted_at IS NULL AND receipt_id IN (${ids.map(() => '?').join(',')}) GROUP BY receipt_id`, ids);
-    for (const r of rows) map[r.receipt_id] = r.paid;
-    return map;
-  }
-
   decorateReceipt(r, paid) {
     r.paid = paid || 0;
     r.remaining = r.cancelled_at ? 0 : r.payable - r.paid;
@@ -761,24 +773,29 @@ class Service {
 
   listReceipts(opts) {
     opts = opts || {};
+    const limit = opts.limit || 500;
     const where = [];
     const params = [];
-    if (opts.customerId) { where.push('customer_id=?'); params.push(opts.customerId); }
-    if (opts.from) { where.push('created_at >= ?'); params.push(opts.from + ' 00:00:00'); }
-    if (opts.to) { where.push('created_at <= ?'); params.push(opts.to + ' 23:59:59'); }
-    let rows = this.all('SELECT * FROM receipts' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC', params);
+    if (opts.customerId) { where.push('r.customer_id = ?'); params.push(opts.customerId); }
+    if (opts.from) { where.push('r.created_at >= ?'); params.push(opts.from + ' 00:00:00'); }
+    if (opts.to) { where.push('r.created_at <= ?'); params.push(opts.to + ' 23:59:59'); }
+    const st = STATUS_SQL[opts.status];
+    if (st) where.push(st);
+    const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+    let rows;
     if (opts.q) {
+      // Türkçe harf farkı gözetmeyen arama: önce yalnızca ad ve numara taranır, sonra eşleşenlerin tamamı okunur
       const q = String(opts.q).trim();
-      rows = rows.filter((r) => String(r.id) === q.replace(/^#/, '') || Calc.matches(r.customer_name, q));
+      const ids = this.all('SELECT r.id, r.customer_name FROM receipts r' + whereSql + ' ORDER BY r.id DESC', params)
+        .filter((r) => String(r.id) === q.replace(/^#/, '') || Calc.matches(r.customer_name, q))
+        .slice(0, limit)
+        .map((r) => r.id);
+      if (!ids.length) return [];
+      rows = this.all(`SELECT r.*, ${PAID_SQL} AS paid FROM receipts r WHERE r.id IN (${ids.map(() => '?').join(',')}) ORDER BY r.id DESC`, ids);
+    } else {
+      rows = this.all(`SELECT r.*, ${PAID_SQL} AS paid FROM receipts r${whereSql} ORDER BY r.id DESC LIMIT ?`, params.concat([limit]));
     }
-    const paid = this.paidMap(rows.map((r) => r.id));
-    rows = rows.map((r) => this.decorateReceipt(r, paid[r.id]));
-    if (opts.status && opts.status !== 'hepsi') {
-      rows = opts.status === 'acik'
-        ? rows.filter((r) => r.status === 'odenmedi' || r.status === 'kismen')
-        : rows.filter((r) => r.status === opts.status);
-    }
-    return rows.slice(0, opts.limit || 500);
+    return rows.map((r) => this.decorateReceipt(r, r.paid));
   }
 
   getReceipt(id) {
@@ -788,7 +805,7 @@ class Service {
     r.payments = this.all('SELECT * FROM payments WHERE receipt_id=? ORDER BY paid_at, id', [id]);
     this.decorateReceipt(r, r.payments.filter((p) => !p.deleted_at).reduce((s, p) => s + p.amount, 0));
     const c = this.get('SELECT * FROM customers WHERE id=?', [r.customer_id]);
-    const bal = this.customerBalances()[r.customer_id] || { account: 0 };
+    const bal = this.customerBalances(r.customer_id)[r.customer_id] || { account: 0 };
     r.customer = c ? { id: c.id, full_name: fullName(c), phone: c.phone, address: c.address, deleted: !!c.deleted_at } : null;
     r.customer_account = bal.account; // müşterinin bize olan borcu (mahsup için)
     return r;
@@ -1005,10 +1022,16 @@ class Service {
     if (opts.from) { where.push('at >= ?'); params.push(opts.from + ' 00:00:00'); }
     if (opts.to) { where.push('at <= ?'); params.push(opts.to + ' 23:59:59'); }
     if (opts.entity) { where.push('entity = ?'); params.push(opts.entity); }
-    let rows = this.all('SELECT id, at, action, entity, entity_id, summary, reason, old_json, new_json FROM audit_log' +
-      (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC', params);
-    if (opts.q) rows = rows.filter((r) => Calc.matches(r.summary + ' ' + (r.reason || ''), opts.q));
-    return rows.slice(0, opts.limit || 500);
+    const limit = opts.limit || 500;
+    const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+    const cols = 'SELECT id, at, action, entity, entity_id, summary, reason, old_json, new_json FROM audit_log';
+    if (!opts.q) return this.all(cols + whereSql + ' ORDER BY id DESC LIMIT ?', params.concat([limit]));
+    const ids = this.all('SELECT id, summary, reason FROM audit_log' + whereSql + ' ORDER BY id DESC', params)
+      .filter((r) => Calc.matches(r.summary + ' ' + (r.reason || ''), opts.q))
+      .slice(0, limit)
+      .map((r) => r.id);
+    if (!ids.length) return [];
+    return this.all(cols + ` WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id DESC`, ids);
   }
 
   verifyAudit() {
@@ -1026,10 +1049,8 @@ class Service {
   dashboard() {
     const today = Calc.todayLocal();
     const todays = this.listReceipts({ from: today, to: today }).filter((r) => r.status !== 'iptal');
-    const open = this.listReceipts({ status: 'acik', limit: 100000 });
-    const balances = this.customerBalances();
-    let theyOwe = 0;
-    for (const b of Object.values(balances)) if (b.account > 0) theyOwe += b.account;
+    const open = this.get(`SELECT COUNT(*) AS n, COALESCE(SUM(r.payable - ${PAID_SQL}), 0) AS v FROM receipts r WHERE ${STATUS_SQL.acik}`);
+    const theyOwe = this.get('SELECT COALESCE(SUM(v), 0) AS v FROM (SELECT SUM(amount) AS v FROM account_entries WHERE deleted_at IS NULL GROUP BY customer_id) WHERE v > 0').v;
     const products = this.listProducts();
     const last = this.get('SELECT MAX(id) AS id FROM receipts');
     return {
@@ -1037,8 +1058,8 @@ class Service {
       today_amount: todays.reduce((s, r) => s + r.total_amount, 0),
       today_bags: todays.reduce((s, r) => s + r.total_bags, 0),
       today_commission: todays.reduce((s, r) => s + r.commission, 0),
-      open_count: open.length,
-      open_amount: open.reduce((s, r) => s + r.remaining, 0),
+      open_count: open.n,
+      open_amount: open.v,
       they_owe: theyOwe,
       stale_products: products.filter((p) => p.price_stale).map((p) => ({ id: p.id, name: p.name, price_updated_at: p.price_updated_at })),
       product_count: products.length,
@@ -1076,7 +1097,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.6';
+  const VERSION = '1.0.7';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
