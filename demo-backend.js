@@ -1076,7 +1076,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.4';
+  const VERSION = '1.0.5';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
@@ -1202,7 +1202,8 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 
   const mainApi = {
     appInfo: () => ({ version: VERSION + ' (demo)', dataDir: 'Demo: veriler bu tarayıcıda tutulur', docsDir: 'Belgeler\\Coşkun Bahar Fişler' }),
-    printReceipt: (id, layout) => printReceipt(service.getReceipt(id), layout),
+    listPrinters: () => [], // demoda tarayıcının yazdırma penceresi kullanılır
+    printReceipt: (id, opts) => printReceipt(service.getReceipt(id), (opts && opts.layout) || opts),
     receiptPdf: (id) => fakeFile(service.getReceipt(id), 'pdf'),
     receiptExcel: (id) => fakeFile(service.getReceipt(id), 'xlsx'),
     exportAllExcel: () => 'Belgeler\\Coşkun Bahar Fişler\\Dokumler\\Tum_Kayitlar.xlsx   (demo: dosya oluşturulmaz)',

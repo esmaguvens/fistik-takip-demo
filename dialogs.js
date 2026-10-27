@@ -166,60 +166,75 @@ window.Dialogs = (() => {
     });
   }
 
-  // Yazdırmadan önce kâğıt seçimi. Son seçim hatırlanır. Dönüş: 'a5' | 'a4' | 'a4x2' | null
-  const PRINT_KEY = 'fh-yazdirma-kagidi';
-  function printOptions(receiptId) {
-    let paper = 'a5';
-    let copies = 1;
+  // Yazdırmadan önce kâğıt ve yazıcı seçimi. Son seçim hatırlanır.
+  // Dönüş: { layout: 'a5' | 'a4' | 'a4x2', printer: ad | null, printerLabel, dialog } veya null (vazgeçildi)
+  const PRINT_KEY = 'fh-yazdirma';
+  function loadPrintPrefs() {
     try {
-      const saved = localStorage.getItem(PRINT_KEY);
-      if (saved === 'a4') paper = 'a4';
-      if (saved === 'a4x2') { paper = 'a4'; copies = 2; }
-    } catch (e) { /* hatırlanamıyorsa A5 */ }
-    const paperSeg = h('div', { class: 'seg' });
-    const copySeg = h('div', { class: 'seg' });
+      const v = JSON.parse(localStorage.getItem(PRINT_KEY) || '{}');
+      return { layout: ['a5', 'a4', 'a4x2'].includes(v.layout) ? v.layout : 'a4', printer: v.printer || null };
+    } catch (e) { return { layout: 'a4', printer: null }; }
+  }
+
+  async function printOptions(receiptId) {
+    const prefs = loadPrintPrefs();
+    let layout = prefs.layout;
+    let printers = [];
+    try { printers = await UI.api('listPrinters'); } catch (e) { printers = []; }
+    const pick = printers.find((p) => p.name === prefs.printer) || printers.find((p) => p.isDefault) ||
+      printers.find((p) => !/pdf|onenote|xps|fax/i.test(p.name)) || printers[0];
+
     const group = (title, el) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, title), el);
-    const copyField = group('A4 sayfaya', copySeg);
-    const hint = h('p', { class: 'muted', style: { fontSize: '.88rem', margin: '4px 0 0' } });
+    const paperSeg = h('div', { class: 'seg seg-wrap' });
+    const hint = h('p', { class: 'muted', style: { fontSize: '.88rem', margin: '4px 0 12px' } });
+    const printerSel = h('select', null, printers.map((p) => h('option', { value: p.name, selected: !!pick && p.name === pick.name }, p.displayName)));
+    const winDialog = h('input', { type: 'checkbox' });
+    const HINTS = {
+      a4: 'Tepsiye A4 kâğıt koyun. Fiş A4 sayfayı kaplayacak şekilde büyütülür.',
+      a5: 'Tepsiye A5 kâğıt dik olarak yerleştirin. Fiş A5 sayfayı kaplar.',
+      a4x2: 'Tepsiye A4 kâğıt koyun. Sayfa yatay basılır: aynı fiş A5 boyutunda yan yana iki kez. Ortadaki kesik çizgiden kesin; biri üreticiye, biri size.',
+    };
     const draw = () => {
       UI.clear(paperSeg);
-      UI.clear(copySeg);
-      for (const [k, label] of [['a5', 'A5 kâğıt'], ['a4', 'A4 kâğıt']]) {
-        paperSeg.appendChild(h('button', { type: 'button', class: paper === k ? 'on' : '', onclick: () => { paper = k; draw(); } }, label));
+      for (const [k, label] of [['a4', 'A4 kâğıt'], ['a5', 'A5 kâğıt'], ['a4x2', 'A4 – 2 fiş yan yana']]) {
+        paperSeg.appendChild(h('button', { type: 'button', class: layout === k ? 'on' : '', onclick: () => { layout = k; draw(); } }, label));
       }
-      for (const [k, label] of [[1, '1 fiş'], [2, '2 nüsha yan yana']]) {
-        copySeg.appendChild(h('button', { type: 'button', class: copies === k ? 'on' : '', onclick: () => { copies = k; draw(); } }, label));
-      }
-      copyField.hidden = paper !== 'a4';
-      hint.textContent = paper === 'a5'
-        ? 'Tepsiye A5 kâğıt dik olarak yerleştirin. Fiş tüm sayfayı kaplar.'
-        : copies === 1
-          ? 'Fiş makbuz boyutunda, A4 sayfanın üst kısmına basılır; altındaki kesik çizgiden kesebilirsiniz.'
-          : 'Sayfa yatay basılır: aynı fiş yan yana iki kez. Ortadaki kesik çizgiden kesin; biri üreticiye, biri size.';
+      hint.textContent = HINTS[layout];
     };
     draw();
+    const body = h('div', null, group('Kâğıt', paperSeg), hint,
+      printers.length ? group('Yazıcı', printerSel) : null,
+      printers.length ? h('label', { class: 'check', style: { fontWeight: 500, fontSize: '.9rem' } }, winDialog,
+        h('span', null, 'Windows yazdırma penceresini de aç (kopya sayısı vb. için). O pencerede kâğıt boyutunu ayrıca seçmeniz gerekir.')) : null);
     return modal({
       title: 'Fiş ' + receiptId + ' — yazdır',
-      body: h('div', null, group('Kâğıt', paperSeg), copyField, hint),
+      body,
       actions: [
         { label: 'Vazgeç', value: null },
         {
           label: 'Yazdır', kind: 'primary', icon: 'print',
           onClick: () => {
-            const layout = paper === 'a5' ? 'a5' : (copies === 2 ? 'a4x2' : 'a4');
-            try { localStorage.setItem(PRINT_KEY, layout); } catch (e) { /* yoksay */ }
-            return layout;
+            const printer = printers.length ? printerSel.value : null;
+            try { localStorage.setItem(PRINT_KEY, JSON.stringify({ layout, printer })); } catch (e) { /* yoksay */ }
+            const chosen = printers.find((p) => p.name === printer);
+            return { layout, printer, printerLabel: chosen ? chosen.displayName : '', dialog: !printers.length || winDialog.checked };
           },
         },
       ],
     });
   }
 
-  // Kâğıdı sorup fişi yazdırır
+  // Kâğıdı ve yazıcıyı sorup fişi yazdırır
   async function printReceipt(id) {
-    const layout = await printOptions(id);
-    if (!layout) return null;
-    return UI.api('printReceipt', id, layout);
+    const o = await printOptions(id);
+    if (!o) return null;
+    const res = await UI.api('printReceipt', id, { layout: o.layout, printer: o.dialog ? null : o.printer });
+    if (res && res.printed === false) {
+      if (/cancel/i.test(res.reason || '')) return res;
+      throw new Error('Fiş yazdırılamadı' + (res.reason ? ' (' + res.reason + ')' : '') + '. Yazıcının açık ve bağlı olduğunu, tepside kâğıt bulunduğunu kontrol edin.');
+    }
+    if (!o.dialog) toast('Fiş yazıcıya gönderildi' + (o.printerLabel ? ': ' + o.printerLabel : '') + '.');
+    return res;
   }
 
   return { customerForm, priceUpdate, addPayment, accountEntry, printOptions, printReceipt };

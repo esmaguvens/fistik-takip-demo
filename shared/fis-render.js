@@ -52,22 +52,22 @@
   .fis-sheet{position:relative;overflow:hidden;background:#fff;page-break-after:always;break-after:page;}
   .fis-sheet:last-child{page-break-after:auto;break-after:auto;}
   .fis-sheet .fis-page{page-break-after:auto;break-after:auto;}
-  .fis-sheet.a4{width:210mm;height:297mm;padding-left:31mm;box-sizing:border-box;}
+  .fis-sheet.a4{width:210mm;height:297mm;}
+  .fis-sheet.a4 .fis-page{zoom:1.4142;}
   .fis-sheet.a4x2{width:297mm;height:210mm;display:flex;}
-  .fis-cut-h{position:absolute;left:0;right:0;top:210mm;border-top:.3mm dashed #9a9a9a;}
   .fis-cut-v{position:absolute;top:0;bottom:0;left:148.5mm;border-left:.3mm dashed #9a9a9a;}
   .fis-iptal{position:absolute;left:0;right:0;top:45%;text-align:center;transform:rotate(-24deg);
     font-size:44pt;font-weight:900;color:rgba(190,20,20,.28);letter-spacing:2pt;pointer-events:none;}
   `;
 
-  // Kâğıt düzenleri: fiş her zaman makbuz (A5) boyutunda basılır; A4'te büyütülmez.
+  // Kâğıt düzenleri:
   //  a5   : A5 kâğıt, sayfa başına bir fiş
-  //  a4   : A4 dikey, fiş üst kısımda, altında kesim çizgisi
-  //  a4x2 : A4 yatay, aynı fiş yan yana iki nüsha (üretici + işletme), ortada kesim çizgisi
+  //  a4   : A4 kâğıt, fiş tüm sayfayı kaplar (A5 düzeni √2 = 1,4142 kat büyütülür; A5 → A4 oranı)
+  //  a4x2 : A4 yatay, aynı fiş A5 boyutunda yan yana iki kez (üretici + işletme), ortada kesim çizgisi
   const LAYOUTS = {
-    a5: { label: 'A5', pageSize: 'A5', landscape: false, css: 'A5 portrait' },
-    a4: { label: 'A4 (1 fiş)', pageSize: 'A4', landscape: false, css: 'A4 portrait' },
-    a4x2: { label: 'A4 (2 nüsha)', pageSize: 'A4', landscape: true, css: 'A4 landscape' },
+    a5: { label: 'A5 kâğıt', pageSize: 'A5', landscape: false, css: 'A5 portrait' },
+    a4: { label: 'A4 kâğıt', pageSize: 'A4', landscape: false, css: 'A4 portrait' },
+    a4x2: { label: 'A4 – 2 fiş yan yana', pageSize: 'A4', landscape: true, css: 'A4 landscape' },
   };
   const layoutOf = (name) => LAYOUTS[name] || LAYOUTS.a5;
   const pageCss = (name) => '@page{size:' + layoutOf(name).css + ';margin:0;}';
@@ -150,7 +150,7 @@
   // Seçilen kâğıt düzenine göre yazdırılacak sayfalar
   function renderSheets(r, company, layout) {
     const pages = pageList(r, company);
-    if (layout === 'a4') return pages.map((p) => `<div class="fis-sheet a4">${p}<div class="fis-cut-h"></div></div>`).join('');
+    if (layout === 'a4') return pages.map((p) => `<div class="fis-sheet a4">${p}</div>`).join('');
     if (layout === 'a4x2') return pages.map((p) => `<div class="fis-sheet a4x2">${p}${p}<div class="fis-cut-v"></div></div>`).join('');
     return pages.join('');
   }

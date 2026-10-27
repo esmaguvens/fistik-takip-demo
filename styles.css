@@ -120,6 +120,8 @@ input[readonly] { background: var(--cream); }
 .seg button { flex: 1; font: inherit; font-weight: 600; padding: 10px 12px; border: 0; background: none; cursor: pointer; border-right: 1px solid var(--line); min-height: 44px; }
 .seg button:last-child { border-right: 0; }
 .seg button.on { background: var(--green-700); color: #fff; }
+.seg-wrap { flex-wrap: wrap; }
+.seg-wrap button { flex: 1 1 auto; }
 .seg button:hover:not(.on) { background: var(--pist-100); }
 .searchbar { display: flex; align-items: center; gap: 8px; background: #fff; border: 1.5px solid var(--line-strong); border-radius: 8px; padding: 0 12px; min-width: 320px; }
 .searchbar input { border: 0; box-shadow: none !important; padding-left: 0; }
