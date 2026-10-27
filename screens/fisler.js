@@ -84,7 +84,7 @@
     const actions = h('div', { class: 'card' },
       h('h3', { style: { marginBottom: '12px' } }, 'Çıktı'),
       h('div', { class: 'btn-col' },
-        btn('Yazdır', { kind: 'primary', icon: 'print', onClick: run(() => UI.api('printReceipt', id)) }),
+        btn('Yazdır', { kind: 'primary', icon: 'print', onClick: run(() => Dialogs.printReceipt(id)) }),
         btn('PDF kaydet', { icon: 'file', onClick: run(async () => UI.fileSaved('PDF kaydedildi', await UI.api('receiptPdf', id))) }),
         btn('Excel kaydet', { icon: 'table', onClick: run(async () => UI.fileSaved('Excel kaydedildi', await UI.api('receiptExcel', id))) }),
         btn('Fiş klasörü', { icon: 'folder', onClick: run(() => UI.api('openDocsDir')) })),

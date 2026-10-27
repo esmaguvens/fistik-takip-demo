@@ -1076,7 +1076,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.2';
+  const VERSION = '1.0.4';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
@@ -1175,7 +1175,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 
   // ---------- yazdırma (tarayıcının yazdır / PDF olarak kaydet penceresi) ----------
   // Fiş, sayfaya yalnızca yazdırırken görünen bir bölüm olarak eklenir; sonra tarayıcının yazdır penceresi açılır.
-  function printReceipt(r) {
+  function printReceipt(r, layout) {
     for (const id of ['demo-print-root', 'demo-print-style']) {
       const old = document.getElementById(id);
       if (old) old.remove();
@@ -1183,12 +1183,12 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     const style = document.createElement('style');
     style.id = 'demo-print-style';
     style.textContent = '@media screen{#demo-print-root{display:none}}' +
-      '@media print{@page{size:A5 portrait;margin:0}html,body{height:auto!important;background:#fff!important}' +
+      '@media print{' + window.FisRender.pageCss(layout) + 'html,body{height:auto!important;background:#fff!important}' +
       'body>*:not(#demo-print-root){display:none!important}#demo-print-root{display:block}' +
       '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' + window.FisRender.CSS;
     const root = document.createElement('div');
     root.id = 'demo-print-root';
-    root.innerHTML = window.FisRender.renderPages(r, company());
+    root.innerHTML = window.FisRender.renderSheets(r, company(), layout);
     document.head.appendChild(style);
     document.body.appendChild(root);
     setTimeout(() => window.print(), 150);
@@ -1202,7 +1202,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 
   const mainApi = {
     appInfo: () => ({ version: VERSION + ' (demo)', dataDir: 'Demo: veriler bu tarayıcıda tutulur', docsDir: 'Belgeler\\Coşkun Bahar Fişler' }),
-    printReceipt: (id) => printReceipt(service.getReceipt(id)),
+    printReceipt: (id, layout) => printReceipt(service.getReceipt(id), layout),
     receiptPdf: (id) => fakeFile(service.getReceipt(id), 'pdf'),
     receiptExcel: (id) => fakeFile(service.getReceipt(id), 'xlsx'),
     exportAllExcel: () => 'Belgeler\\Coşkun Bahar Fişler\\Dokumler\\Tum_Kayitlar.xlsx   (demo: dosya oluşturulmaz)',

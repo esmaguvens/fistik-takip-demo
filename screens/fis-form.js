@@ -256,7 +256,7 @@
       } catch (e) { UI.showError(e); return; }
       App.setLeaveGuard(null);
       try {
-        if (after === 'print') await UI.api('printReceipt', id);
+        if (after === 'print') await Dialogs.printReceipt(id);
         if (after === 'pdf') await UI.fileSaved('PDF kaydedildi', await UI.api('receiptPdf', id));
       } catch (e) { UI.showError(e); }
       App.go('#/fis/' + id);

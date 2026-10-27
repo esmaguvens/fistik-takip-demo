@@ -210,7 +210,7 @@ table.grid tfoot td { font-weight: 800; background: #f8f5ea; border-top: 2px sol
 .toast.out { opacity: 0; transform: translateY(8px); }
 
 /* ---------- fiş formu (kağıt görünümü) ---------- */
-.fis-layout { display: grid; grid-template-columns: minmax(640px, 1fr) 360px; gap: 22px; align-items: start; }
+.fis-layout { display: grid; grid-template-columns: minmax(560px, 1fr) 330px; gap: 22px; align-items: start; }
 .paper { background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.08); padding: 22px 26px 26px; }
 .paper-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; color: var(--blue); }
 .paper-firma { font-size: 1.45rem; font-weight: 800; letter-spacing: .3px; }

@@ -166,5 +166,61 @@ window.Dialogs = (() => {
     });
   }
 
-  return { customerForm, priceUpdate, addPayment, accountEntry };
+  // Yazdırmadan önce kâğıt seçimi. Son seçim hatırlanır. Dönüş: 'a5' | 'a4' | 'a4x2' | null
+  const PRINT_KEY = 'fh-yazdirma-kagidi';
+  function printOptions(receiptId) {
+    let paper = 'a5';
+    let copies = 1;
+    try {
+      const saved = localStorage.getItem(PRINT_KEY);
+      if (saved === 'a4') paper = 'a4';
+      if (saved === 'a4x2') { paper = 'a4'; copies = 2; }
+    } catch (e) { /* hatırlanamıyorsa A5 */ }
+    const paperSeg = h('div', { class: 'seg' });
+    const copySeg = h('div', { class: 'seg' });
+    const group = (title, el) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, title), el);
+    const copyField = group('A4 sayfaya', copySeg);
+    const hint = h('p', { class: 'muted', style: { fontSize: '.88rem', margin: '4px 0 0' } });
+    const draw = () => {
+      UI.clear(paperSeg);
+      UI.clear(copySeg);
+      for (const [k, label] of [['a5', 'A5 kâğıt'], ['a4', 'A4 kâğıt']]) {
+        paperSeg.appendChild(h('button', { type: 'button', class: paper === k ? 'on' : '', onclick: () => { paper = k; draw(); } }, label));
+      }
+      for (const [k, label] of [[1, '1 fiş'], [2, '2 nüsha yan yana']]) {
+        copySeg.appendChild(h('button', { type: 'button', class: copies === k ? 'on' : '', onclick: () => { copies = k; draw(); } }, label));
+      }
+      copyField.hidden = paper !== 'a4';
+      hint.textContent = paper === 'a5'
+        ? 'Tepsiye A5 kâğıt dik olarak yerleştirin. Fiş tüm sayfayı kaplar.'
+        : copies === 1
+          ? 'Fiş makbuz boyutunda, A4 sayfanın üst kısmına basılır; altındaki kesik çizgiden kesebilirsiniz.'
+          : 'Sayfa yatay basılır: aynı fiş yan yana iki kez. Ortadaki kesik çizgiden kesin; biri üreticiye, biri size.';
+    };
+    draw();
+    return modal({
+      title: 'Fiş ' + receiptId + ' — yazdır',
+      body: h('div', null, group('Kâğıt', paperSeg), copyField, hint),
+      actions: [
+        { label: 'Vazgeç', value: null },
+        {
+          label: 'Yazdır', kind: 'primary', icon: 'print',
+          onClick: () => {
+            const layout = paper === 'a5' ? 'a5' : (copies === 2 ? 'a4x2' : 'a4');
+            try { localStorage.setItem(PRINT_KEY, layout); } catch (e) { /* yoksay */ }
+            return layout;
+          },
+        },
+      ],
+    });
+  }
+
+  // Kâğıdı sorup fişi yazdırır
+  async function printReceipt(id) {
+    const layout = await printOptions(id);
+    if (!layout) return null;
+    return UI.api('printReceipt', id, layout);
+  }
+
+  return { customerForm, priceUpdate, addPayment, accountEntry, printOptions, printReceipt };
 })();
