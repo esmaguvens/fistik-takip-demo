@@ -176,6 +176,15 @@
   };
 
   // Gün farkı (fiyat güncelliği uyarısı için)
+  const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+  // Fiş dosyalarının klasörü: yıl \ "10 Ekim" (numara, klasörlerin takvim sırasıyla dizilmesi için)
+  function receiptFolders(createdAt) {
+    const s = String(createdAt || nowLocal());
+    const m = Number(s.slice(5, 7));
+    return [s.slice(0, 4), String(m).padStart(2, '0') + ' ' + MONTHS[m - 1]];
+  }
+
   function daysSince(s, now) {
     if (!s) return Infinity;
     const a = new Date(String(s).slice(0, 10) + 'T00:00:00');
@@ -200,6 +209,6 @@
     parseNumber, toKurus, roundKg, formatMoney, formatKg, formatInt,
     nowLocal, todayLocal, formatDate, formatTime, formatDateTime,
     normalizeSearch, matches, computeReceipt, paymentStatus,
-    STATUS_LABEL, STATUS_PRINT, daysSince,
+    STATUS_LABEL, STATUS_PRINT, daysSince, MONTHS, receiptFolders,
   };
 });

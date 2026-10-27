@@ -1076,7 +1076,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.5';
+  const VERSION = '1.0.6';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
@@ -1197,7 +1197,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 
   const demoOnly = (what) => { throw new Error('Demo: ' + what + ' yalnızca bilgisayara kurulan programda çalışır.'); };
   const company = () => service.getSetting('company_name');
-  const fakeFile = (r, ext) => 'Belgeler\\Coşkun Bahar Fişler\\' + String(r.created_at).slice(0, 4) + '\\' + r.id + '_' + r.customer_name + '_fis.' + ext +
+  const fakeFile = (r, ext) => 'Belgeler\\Coşkun Bahar Fişler\\' + Calc.receiptFolders(r.created_at).join('\\') + '\\' + r.id + '_' + r.customer_name + '_fis.' + ext +
     '   (demo: dosya oluşturulmaz, gerçek programda bu adla kaydedilir)';
 
   const mainApi = {
