@@ -44,7 +44,7 @@
     const netVal = c.net === 0 ? h('span', null, 'Kapalı') : money(Math.abs(c.net));
     const cards = h('div', { class: 'cards' },
       stat('us', 'Biz ona borçluyuz', money(c.we_owe), 'Ödenmemiş fişlerin kalanı'),
-      stat('them', 'O bize borçlu', money(Math.max(0, c.account)), c.account < 0 ? 'Ayrıca ' + C.formatMoney(-c.account, true) + ' bizim borcumuz (açılış / fazla ödeme)' : 'Elden ve diğer borçlar'),
+      stat('them', 'O bize borçlu', money(Math.max(0, c.account)), c.account < 0 ? 'Ayrıca ' + C.formatMoney(-c.account, true) + ' bizim borcumuz (açılış / fazla ödeme)' : 'Fiş dışı verilen ve açılış borçları'),
       stat(c.net > 0 ? 'them' : c.net < 0 ? 'us' : '', 'Net durum', netVal,
         c.net > 0 ? 'Müşteri bize borçlu' : c.net < 0 ? 'Biz müşteriye borçluyuz' : 'Hesap kapalı'));
 

@@ -119,8 +119,8 @@
   // Tutar = KG × Fiyat
   // Komisyon = Toplam tutar × oran / 100
   // Hamallık = Toplam adet × hamallık ücreti
-  // TOPLAM = Komisyon + Hamallık
-  // Üreticiye ödenecek = Toplam tutar − Komisyon − Hamallık   (Elden ayrı borç olarak tutulur)
+  // TOPLAM = Komisyon + Hamallık + Elden
+  // Üreticiye ödenecek (ÖDENECEK) = Toplam tutar − Komisyon − Hamallık − Elden = Toplam tutar − TOPLAM
   function computeReceipt(input) {
     const rate = Number(input.commissionRate) || 0;
     const fee = Math.round(Number(input.porterFee) || 0);
@@ -138,6 +138,8 @@
     // Eski fişlerde (sürüm 1.0.1 ve öncesi) hamallık üreticiden kesilmiyordu; o fişler porterDeducted=false ile hesaplanır.
     const porterDeducted = input.porterDeducted !== false;
     const cashAdvance = Math.max(0, Math.round(Number(input.cashAdvance) || 0));
+    // Elden, TOPLAM'a eklenir ve ödenecekten düşülür (1.0.11'den itibaren). Eski fişlerde müşteri borcuna yazılıyordu: cashDeducted=false.
+    const cashDeducted = input.cashDeducted !== false;
     return {
       items,
       totalAmount,
@@ -148,9 +150,10 @@
       commission,
       porterage,
       cashAdvance,
-      feeTotal: commission + porterage,
+      feeTotal: commission + porterage + (cashDeducted ? cashAdvance : 0),
       porterDeducted,
-      payable: totalAmount - commission - (porterDeducted ? porterage : 0),
+      cashDeducted,
+      payable: totalAmount - commission - (porterDeducted ? porterage : 0) - (cashDeducted ? cashAdvance : 0),
     };
   }
 

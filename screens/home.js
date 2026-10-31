@@ -53,7 +53,7 @@ window.Screens.home = async function () {
       h('div', { class: 'stat us' }, h('div', { class: 'k' }, 'Üreticilere borcumuz'), h('div', { class: 'v' }, money(d.open_amount)),
         h('div', { class: 's' }, C.formatInt(d.open_count) + ' fiş ödenmedi / kısmen ödendi')),
       h('div', { class: 'stat them' }, h('div', { class: 'k' }, 'Üreticilerin bize borcu'), h('div', { class: 'v' }, money(d.they_owe)),
-        h('div', { class: 's' }, 'Elden ve diğer borçlar'))),
+        h('div', { class: 's' }, 'Fiş dışı verilen ve açılış borçları'))),
     h('div', { class: 'card kom-card' },
       h('div', { class: 'kom-head' }, h('h2', null, 'Komisyonumuz'), btn('Komisyon raporu', { icon: 'money', onClick: () => App.go('#/komisyon') })),
       h('div', { class: 'kom-grid' },

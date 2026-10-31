@@ -102,6 +102,7 @@
     const totalAmount = h('td', { class: 'calc' });
     const payableAmount = h('td', { class: 'calc' });
     const porterDeducted = editing ? !!editing.porter_deducted : true;
+    const cashDeducted = editing ? !!editing.cash_deducted : true;
 
     function drawRows() {
       UI.clear(tbody);
@@ -112,7 +113,7 @@
       });
       tbody.appendChild(h('tr', { class: 'sum' }, h('td', { class: 'lbl', colspan: 2 }, 'Komisyon'), h('td'), comPrice, comAmount));
       tbody.appendChild(h('tr', { class: 'sum' }, h('td', { class: 'lbl', colspan: 2 }, 'Hamallık'), porKg, porPrice, porAmount));
-      tbody.appendChild(h('tr', { class: 'sum' }, h('td', { class: 'lbl', colspan: 2 }, 'Elden'), h('td'), h('td', { class: 'calc' }, h('span', { class: 'sub' }, 'borç')), h('td', null, cashInput)));
+      tbody.appendChild(h('tr', { class: 'sum' }, h('td', { class: 'lbl', colspan: 2 }, 'Elden'), h('td'), h('td', { class: 'calc' }, cashDeducted ? null : h('span', { class: 'sub' }, 'borç')), h('td', null, cashInput)));
       tbody.appendChild(h('tr', { class: 'sum total' }, h('td', { class: 'lbl', colspan: 2 }, 'TOPLAM'), h('td'), h('td'), totalAmount));
       tbody.appendChild(h('tr', { class: 'sum total odenecek' }, h('td', { class: 'lbl', colspan: 2 }, 'ÖDENECEK'), h('td'), h('td'), payableAmount));
       recalc();
@@ -140,7 +141,7 @@
         .filter((r) => r.product_id && r.bags > 0 && r.kg > 0)
         .map((r) => ({ bags: r.bags, kg: r.kg, price: rowPrice(r) || 0 }));
       const cash = cashInput.getValue();
-      return C.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: Number.isNaN(cash) ? 0 : cash || 0, porterDeducted });
+      return C.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: Number.isNaN(cash) ? 0 : cash || 0, porterDeducted, cashDeducted });
     }
 
     function recalc() {
@@ -168,10 +169,15 @@
       payableBox.appendChild(h('div', { class: 'line' }, h('span', null, 'Toplam tutar'), h('span', null, C.formatMoney(c.totalAmount, true))));
       payableBox.appendChild(h('div', { class: 'line' }, h('span', null, '− Komisyon'), h('span', null, C.formatMoney(c.commission, true))));
       if (porterDeducted) payableBox.appendChild(h('div', { class: 'line' }, h('span', null, '− Hamallık'), h('span', null, C.formatMoney(c.porterage, true))));
+      if (cashDeducted && c.cashAdvance) payableBox.appendChild(h('div', { class: 'line' }, h('span', null, '− Elden'), h('span', null, C.formatMoney(c.cashAdvance, true))));
       payableBox.appendChild(h('div', { class: 'line' }, h('span', null, 'Toplam çuval / kg'), h('span', null, C.formatInt(c.totalBags) + ' / ' + C.formatKg(c.totalKg))));
-      if (c.cashAdvance) {
+      if (!cashDeducted && c.cashAdvance) {
         payableBox.appendChild(h('div', { class: 's', style: { marginTop: '8px' } },
-          'Elden ' + C.formatMoney(c.cashAdvance, true) + ' müşterinin bize borcuna eklenecek.'));
+          'Eski kural: elden ' + C.formatMoney(c.cashAdvance, true) + ' müşterinin bize borcuna yazılır.'));
+      }
+      if (c.payable < 0) {
+        payableBox.appendChild(h('div', { class: 's', style: { marginTop: '8px', color: '#ffd6d1', fontWeight: 700 } },
+          'Elden ve kesintiler toplam tutardan büyük; fiş bu hâliyle kaydedilemez.'));
       }
       drawPriceBox();
     }

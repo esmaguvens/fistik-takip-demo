@@ -114,7 +114,7 @@ async function loadSql() {
   return SQL;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const MIGRATIONS = {
   1: `
@@ -250,6 +250,12 @@ const MIGRATIONS = {
   CREATE INDEX IF NOT EXISTS ix_receipts_customer ON receipts(customer_id);
   CREATE INDEX IF NOT EXISTS ix_receipts_created ON receipts(created_at);
   CREATE INDEX IF NOT EXISTS ix_payments_customer ON payments(customer_id);
+  `,
+
+  // 4: Elden artık TOPLAM'a eklenip ödenecekten düşülüyor. Önceki fişler eski kuralla (0) kalır:
+  //    o fişlerde elden müşterinin bize borcuna yazılmıştı.
+  4: `
+  ALTER TABLE receipts ADD COLUMN cash_deducted INTEGER NOT NULL DEFAULT 0;
   `,
 };
 
@@ -860,7 +866,9 @@ class Service {
     const fee = original ? original.porter_fee : Number(this.getSetting('porter_fee'));
     // Hamallık üreticiden kesilir; eski kuralla kesilmiş bir fiş düzeltilirken kendi kuralı korunur.
     const porterDeducted = original ? !!original.porter_deducted : true;
-    const calc = Calc.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: cash, porterDeducted });
+    const cashDeducted = original ? !!original.cash_deducted : true;
+    const calc = Calc.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: cash, porterDeducted, cashDeducted });
+    need(calc.payable >= 0, 'Elden ve kesintiler toplam tutardan büyük olamaz. Elden tutarını kontrol edin.');
     return { customer, calc };
   }
 
@@ -903,12 +911,13 @@ class Service {
     return this.tx(() => {
       const at = this.now();
       const id = this.run(`INSERT INTO receipts(customer_id, customer_name, customer_address, created_at, commission_rate, porter_fee,
-        total_bags, total_kg, total_amount, commission, porterage, cash_advance, fee_total, payable, porter_deducted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        total_bags, total_kg, total_amount, commission, porterage, cash_advance, fee_total, payable, porter_deducted, cash_deducted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [customer.id, fullName(customer), customer.address, at, calc.commissionRate, calc.porterFee, calc.totalBags, calc.totalKg,
-        calc.totalAmount, calc.commission, calc.porterage, calc.cashAdvance, calc.feeTotal, calc.payable, calc.porterDeducted ? 1 : 0]);
+        calc.totalAmount, calc.commission, calc.porterage, calc.cashAdvance, calc.feeTotal, calc.payable, calc.porterDeducted ? 1 : 0, calc.cashDeducted ? 1 : 0]);
       this.insertItems(id, calc.items);
       this.applyStock(id, Service.bagsByProduct(calc.items, 1), 'fis', `Fiş ${id}`);
-      if (calc.cashAdvance > 0) {
+      // Yalnızca eski kuralda elden müşteri borcuna yazılırdı; yeni fişlerde ödenecekten düşülür
+      if (!calc.cashDeducted && calc.cashAdvance > 0) {
         this.run('INSERT INTO account_entries(customer_id, type, amount, at, note, receipt_id, created_at) VALUES (?,?,?,?,?,?,?)',
           [customer.id, 'elden', calc.cashAdvance, at, `Fiş ${id}`, id, at]);
       }
@@ -948,7 +957,7 @@ class Service {
       // Elden kaydını güncelle
       this.run("UPDATE account_entries SET deleted_at=?, delete_reason=? WHERE receipt_id=? AND type='elden' AND deleted_at IS NULL",
         [at, `Fiş ${id} düzeltildi`, id]);
-      if (calc.cashAdvance > 0) {
+      if (!calc.cashDeducted && calc.cashAdvance > 0) {
         this.run('INSERT INTO account_entries(customer_id, type, amount, at, note, receipt_id, created_at) VALUES (?,?,?,?,?,?,?)',
           [customer.id, 'elden', calc.cashAdvance, old.created_at, `Fiş ${id}`, id, at]);
       }
@@ -1173,8 +1182,8 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.11';
-  const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
+  const VERSION = '1.0.12';
+  const STORE_KEY = 'fh-demo-db-v3'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
   let service = null;
@@ -1236,7 +1245,8 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 
     at(-2, '09:40');
     const fMustafa = fis(mustafa, [{ product_id: ham, bags: 15, kg: 790 }, { product_id: boz, bags: 5, kg: 262.5 }], { cash_advance: 500000 });
-    s.addAccountEntry(mehmet, { type: 'tahsilat', amount: 500000, date: day(-2), note: 'Elden borcunun bir kısmını ödedi' });
+    s.addAccountEntry(mehmet, { type: 'borc_ekle', amount: 1000000, date: day(-2), note: 'Fiş dışı borç verildi' });
+    s.addAccountEntry(mehmet, { type: 'tahsilat', amount: 500000, date: day(-2), note: 'Borcunun bir kısmını ödedi' });
 
     at(-1, '09:15');
     const fFatma = fis(fatma, [{ product_id: kirmizi, bags: 10, kg: 515 }]);
