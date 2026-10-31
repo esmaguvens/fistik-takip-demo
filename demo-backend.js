@@ -1073,6 +1073,52 @@ class Service {
     return { ok: behind <= 10, now, latest, behind_minutes: behind };
   }
 
+  // Ana sayfa için: bugün, bu ay, bu yıl ve tüm zamanların komisyonu
+  commissionTotals(today) {
+    today = today || Calc.todayLocal();
+    const sum = (from) => this.get('SELECT COALESCE(SUM(commission), 0) AS v FROM receipts WHERE cancelled_at IS NULL' +
+      (from ? ' AND created_at >= ?' : ''), from ? [from + ' 00:00:00'] : []).v;
+    return { today: sum(today), month: sum(today.slice(0, 7) + '-01'), year: sum(today.slice(0, 4) + '-01-01'), all: sum(null) };
+  }
+
+  // ---------- komisyon ----------
+  // Seçilen dönemde (fişin kesildiği tarihe göre) iptal edilmemiş fişlerin komisyonu.
+  // opts: { from, to (YYYY-MM-DD), q (müşteri adı), limit (listelenecek fiş sayısı) }
+  commissionReport(opts) {
+    opts = opts || {};
+    const where = ['r.cancelled_at IS NULL'];
+    const params = [];
+    if (opts.from) { where.push('r.created_at >= ?'); params.push(opts.from + ' 00:00:00'); }
+    if (opts.to) { where.push('r.created_at <= ?'); params.push(opts.to + ' 23:59:59'); }
+    let rows = this.all('SELECT r.id, r.created_at, r.customer_id, r.customer_name, r.total_bags, r.total_kg, r.total_amount, r.commission_rate, r.commission' +
+      ' FROM receipts r WHERE ' + where.join(' AND ') + ' ORDER BY r.id DESC', params);
+    if (opts.q) rows = rows.filter((r) => Calc.matches(r.customer_name, opts.q));
+    const summary = { count: rows.length, amount: 0, commission: 0, bags: 0, kg: 0 };
+    const months = {};
+    for (const r of rows) {
+      summary.amount += r.total_amount;
+      summary.commission += r.commission;
+      summary.bags += r.total_bags;
+      summary.kg += r.total_kg;
+      const ym = String(r.created_at).slice(0, 7);
+      const m = (months[ym] = months[ym] || { ym, count: 0, amount: 0, commission: 0 });
+      m.count += 1;
+      m.amount += r.total_amount;
+      m.commission += r.commission;
+    }
+    summary.kg = Calc.roundKg(summary.kg);
+    const limit = opts.limit || 1000;
+    return {
+      from: opts.from || null,
+      to: opts.to || null,
+      q: opts.q || '',
+      summary,
+      months: Object.values(months).sort((a, b) => (a.ym < b.ym ? 1 : -1)),
+      rows: rows.slice(0, limit),
+      truncated: rows.length > limit,
+    };
+  }
+
   // ---------- ana sayfa özeti ----------
   dashboard() {
     const today = Calc.todayLocal();
@@ -1095,6 +1141,7 @@ class Service {
       last_receipt_id: last ? last.id : null,
       recent: this.listReceipts({ limit: 8 }),
       clock: this.clockCheck(),
+      commission: this.commissionTotals(today),
     };
   }
 
@@ -1126,7 +1173,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.10';
+  const VERSION = '1.0.11';
   const STORE_KEY = 'fh-demo-db-v2'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
@@ -1257,6 +1304,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     receiptPdf: (id) => fakeFile(service.getReceipt(id), 'pdf'),
     receiptExcel: (id) => fakeFile(service.getReceipt(id), 'xlsx'),
     exportAllExcel: () => 'Belgeler\\Coşkun Bahar Fişler\\Dokumler\\Tum_Kayitlar.xlsx   (demo: dosya oluşturulmaz)',
+    commissionExcel: () => 'Belgeler\\Coşkun Bahar Fişler\\Raporlar\\Komisyon.xlsx   (demo: dosya oluşturulmaz)',
     openPath: () => demoOnly('Dosya açma'),
     showInFolder: () => demoOnly('Klasör açma'),
     openDocsDir: () => demoOnly('Klasör açma'),
@@ -1274,7 +1322,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     'listProducts', 'getProduct', 'addProduct', 'renameProduct', 'updatePrice', 'priceHistory', 'adjustStock', 'deleteProduct',
     'listCustomers', 'getCustomer', 'addCustomer', 'updateCustomer', 'deleteCustomer', 'addAccountEntry', 'deleteAccountEntry',
     'listReceipts', 'getReceipt', 'createReceipt', 'updateReceipt', 'cancelReceipt', 'addPayment', 'deletePayment',
-    'stockMovements', 'listAudit', 'verifyAudit', 'dashboard', 'getSettings', 'saveSettings', 'clockCheck',
+    'stockMovements', 'listAudit', 'verifyAudit', 'dashboard', 'getSettings', 'saveSettings', 'clockCheck', 'commissionReport',
   ]);
 
   const status = () => ({

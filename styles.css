@@ -78,6 +78,20 @@ p { margin: .4rem 0; }
 .page-head h1 { display: flex; align-items: center; gap: 10px; }
 .page-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .firma-sabit { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--cream); font-weight: 700; color: var(--green-900); }
+/* Komisyon */
+.kom-card { margin-bottom: 4px; }
+.kom-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.kom-head h2 { margin: 0; }
+.kom-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kom-item { background: var(--pist-100); border: 1px solid var(--pist-200); border-radius: 8px; padding: 10px 14px; }
+.kom-item .k { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.kom-item .v { font-size: 1.3rem; font-weight: 800; color: var(--green-800); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat.kom { border-color: var(--pist-200); background: var(--pist-100); }
+.stat.kom .v { color: var(--green-800); }
+.bar-cell { width: 30%; }
+.kom-bar { height: 12px; background: var(--cream); border-radius: 6px; overflow: hidden; }
+.kom-bar span { display: block; height: 100%; background: var(--green-600); border-radius: 6px; }
+@media (max-width: 800px) { .kom-grid { grid-template-columns: 1fr 1fr; } }
 .link-btn { display: inline-block; margin-top: 16px; background: none; border: 0; padding: 4px; font: inherit; font-size: .95rem; color: var(--green-700); text-decoration: underline; cursor: pointer; }
 .back-link { display: inline-flex; align-items: center; gap: 4px; color: var(--green-700); text-decoration: none; font-weight: 600; margin-bottom: 8px; cursor: pointer; background: none; border: 0; font-size: 1rem; padding: 0; }
 
@@ -119,7 +133,7 @@ input[readonly] { background: var(--cream); }
 .check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-weight: 600; }
 .check input { width: 22px; height: 22px; min-height: 0; margin: 1px 0 0; accent-color: var(--green-700); flex: none; }
 .seg { display: flex; border: 1.5px solid var(--line-strong); border-radius: 9px; overflow: hidden; background: #fff; }
-.seg button { flex: 1; font: inherit; font-weight: 600; padding: 10px 12px; border: 0; background: none; cursor: pointer; border-right: 1px solid var(--line); min-height: 44px; }
+.seg button { flex: 1; white-space: nowrap; font: inherit; font-weight: 600; padding: 10px 12px; border: 0; background: none; cursor: pointer; border-right: 1px solid var(--line); min-height: 44px; }
 .seg button:last-child { border-right: 0; }
 .seg button.on { background: var(--green-700); color: #fff; }
 .seg-wrap { flex-wrap: wrap; }
