@@ -10,7 +10,7 @@ const App = (() => {
     { hash: '#/fisler', label: 'Fişler', icon: 'receipt', match: /^#\/fis(ler|\/\d+)/ },
     { hash: '#/komisyon', label: 'Komisyon', icon: 'money' },
     { hash: '#/musteriler', label: 'Müşteriler', icon: 'users', match: /^#\/musteri/ },
-    { hash: '#/urunler', label: 'Ürünler ve Fiyatlar', icon: 'tag' },
+    { hash: '#/urunler', label: 'Ürünler', icon: 'tag' },
     { hash: '#/stok', label: 'Stok', icon: 'box' },
     { sep: true },
     { hash: '#/yedek', label: 'Yedekleme', icon: 'save' },

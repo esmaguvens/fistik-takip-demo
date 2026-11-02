@@ -342,12 +342,6 @@ const UI = (() => {
     return h('span', { class: 'net-us' }, 'Biz ', money(-net), ' borçluyuz');
   }
 
-  function priceAge(p) {
-    const d = p.price_age_days;
-    const txt = d <= 0 ? 'Bugün güncellendi' : d === 1 ? 'Dün güncellendi' : d + ' gün önce güncellendi';
-    return h('span', { class: 'badge ' + (p.price_stale ? 'warn' : 'fresh') }, txt);
-  }
-
   function page(title, actions, ...content) {
     return h('div', { class: 'page' },
       h('div', { class: 'page-head' }, h('h1', null, title), h('div', { class: 'page-actions' }, actions || [])),
@@ -374,7 +368,7 @@ const UI = (() => {
 
   return {
     h, clear, icon, btn, api, auth, toast, showError, modal, alertBox, confirmBox, field,
-    numberInput, searchSelect, table, statusBadge, money, netText, priceAge, page, debounce, fileSaved,
+    numberInput, searchSelect, table, statusBadge, money, netText, page, debounce, fileSaved,
   };
 })();
 

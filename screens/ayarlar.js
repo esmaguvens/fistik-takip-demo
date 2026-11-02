@@ -1,4 +1,4 @@
-// Ayarlar: firma adı, komisyon, hamallık, fiyat uyarısı, otomatik kilit, klasörler, PIN.
+// Ayarlar: firma adı, komisyon, hamallık, otomatik kilit, klasörler, PIN.
 'use strict';
 
 window.Screens.ayarlar = async function () {
@@ -8,17 +8,16 @@ window.Screens.ayarlar = async function () {
 
   const rate = numberInput({ kind: 'percent', value: s.commission_rate });
   const fee = numberInput({ kind: 'money', value: s.porter_fee });
-  const warnDays = numberInput({ kind: 'int', value: s.price_warn_days });
   const lockMin = numberInput({ kind: 'int', value: s.auto_lock_minutes });
   let docsDir = s.docs_dir;
   const docsPath = h('p', { class: 'path' }, docsDir || info.docsDir);
 
   async function save() {
-    const vals = { rate: rate.getValue(), fee: fee.getValue(), warn: warnDays.getValue(), lock: lockMin.getValue() };
+    const vals = { rate: rate.getValue(), fee: fee.getValue(), lock: lockMin.getValue() };
     if (Object.values(vals).some((v) => v === null || Number.isNaN(v))) { toast('Tüm sayıları doğru yazın.', 'error'); return; }
     await UI.api('saveSettings', {
       commission_rate: vals.rate, porter_fee: vals.fee,
-      price_warn_days: vals.warn, auto_lock_minutes: vals.lock, docs_dir: docsDir,
+      auto_lock_minutes: vals.lock, docs_dir: docsDir,
     });
     await App.loadSettings();
     toast('Ayarlar kaydedildi.');
@@ -80,8 +79,7 @@ window.Screens.ayarlar = async function () {
           h('p', { class: 'muted', style: { fontSize: '.88rem', marginTop: '8px' } }, 'Değişikliği uygulamak için sağ üstteki "Kaydet"e basın. Dosyalar yıl ve ay klasörlerine ayrılır.'))),
       h('div', null,
         h('div', { class: 'card' },
-          h('h2', null, 'Uyarılar ve güvenlik'),
-          field('Fiyat uyarısı (gün)', warnDays, 'Bu kadar gün güncellenmeyen fiyat için uyarı verilir. 1 = her gün kontrol.'),
+          h('h2', null, 'Güvenlik'),
           field('Otomatik kilit (dakika)', lockMin, 'Bu süre işlem yapılmazsa program kilitlenir. 0 = kapalı.'),
           btn('PIN değiştir', { icon: 'lock', onClick: run(changePin) })),
         h('div', { class: 'card' },

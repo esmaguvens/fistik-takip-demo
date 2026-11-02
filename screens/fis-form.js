@@ -1,4 +1,4 @@
-// Yeni fiş / fiş düzeltme. Ekran, kağıt fişin görünümündedir.
+// Yeni fiş / fiş düzeltme. Ekran, kağıt fişin görünümündedir. Fiyat her satıra elle yazılır.
 'use strict';
 
 (() => {
@@ -19,19 +19,17 @@
       products = all.filter((p) => !p.deleted_at || used.has(p.id));
     }
     await loadProducts();
-    const productById = (id) => products.find((p) => p.id === Number(id));
 
     // ---------- durum ----------
     const state = {
       customer: null,
       rows: [],
       payMode: 'odenmedi',
-      confirmed: false,
     };
     if (editing) {
-      state.rows = editing.items.map((it) => ({ product_id: it.product_id, bags: it.bags, kg: it.kg, orig_price: it.price, orig_product: it.product_id }));
+      state.rows = editing.items.map((it) => ({ product_id: it.product_id, bags: it.bags, kg: it.kg, price: it.price }));
     }
-    while (state.rows.length < MIN_ROWS) state.rows.push({ product_id: null, bags: null, kg: null });
+    while (state.rows.length < MIN_ROWS) state.rows.push({ product_id: null, bags: null, kg: null, price: null });
 
     // ---------- müşteri ----------
     const custInfo = h('div', { class: 'cust-info' });
@@ -64,30 +62,30 @@
         h('option', { value: p.id, selected: p.id === Number(selectedId) }, p.name + (p.deleted_at ? ' (silinmiş)' : ''))));
     }
 
+    // Satırın elle yazılan kg fiyatı (kuruş); boş veya hatalıysa null
     function rowPrice(row) {
-      if (!row.product_id) return null;
-      if (row.orig_price !== undefined && row.orig_price !== null && Number(row.product_id) === row.orig_product) return row.orig_price;
-      const p = productById(row.product_id);
-      return p ? p.price : null;
+      return row.price > 0 ? row.price : null;
     }
 
     function makeRow(row, idx) {
       const sel = h('select', { 'aria-label': 'Cinsi' }, productOptions(row.product_id));
       const bags = numberInput({ kind: 'int', value: row.bags });
       const kg = numberInput({ kind: 'kg', value: row.kg });
-      const priceCell = h('td', { class: 'calc' });
+      const price = numberInput({ kind: 'money', value: row.price, placeholder: '0,00' });
+      price.setAttribute('aria-label', 'Fiyatı (TL / kg)');
       const amountCell = h('td', { class: 'calc' });
       const rm = h('button', { type: 'button', class: 'icon-btn rm', title: 'Satırı temizle', onclick: () => {
-        row.product_id = null; row.bags = null; row.kg = null; delete row.orig_price;
-        sel.value = ''; bags.value = ''; kg.value = ''; recalc();
+        row.product_id = null; row.bags = null; row.kg = null; row.price = null;
+        sel.value = ''; bags.value = ''; kg.value = ''; price.value = ''; recalc();
       } }, icon('x', 16));
       sel.addEventListener('change', () => { row.product_id = sel.value ? Number(sel.value) : null; recalc(); });
       bags.addEventListener('input', () => { row.bags = bags.getValue(); recalc(); });
       kg.addEventListener('input', () => { row.kg = kg.getValue(); recalc(); });
+      price.addEventListener('input', () => { row.price = price.getValue(); recalc(); });
       const tr = h('tr', { class: 'item' },
         h('td', null, h('div', { class: 'cinsi-cell' }, sel, rm)),
-        h('td', null, bags), h('td', null, kg), priceCell, amountCell);
-      rowEls[idx] = { tr, priceCell, amountCell, sel };
+        h('td', null, bags), h('td', null, kg), h('td', null, price), amountCell);
+      rowEls[idx] = { tr, amountCell, sel };
       return tr;
     }
 
@@ -121,9 +119,6 @@
 
     // ---------- yan panel ----------
     const payableBox = h('div', { class: 'payable' });
-    const priceBox = h('div', { class: 'price-check' });
-    const confirmBox = h('input', { type: 'checkbox' });
-    confirmBox.addEventListener('change', () => { state.confirmed = confirmBox.checked; });
     const partialInput = numberInput({ kind: 'money', placeholder: 'Ödenen tutar' });
     const partialField = field('Şimdi ödenen tutar (TL)', partialInput);
     const paySeg = h('div', { class: 'seg' });
@@ -138,8 +133,8 @@
 
     function currentCalc() {
       const items = state.rows
-        .filter((r) => r.product_id && r.bags > 0 && r.kg > 0)
-        .map((r) => ({ bags: r.bags, kg: r.kg, price: rowPrice(r) || 0 }));
+        .filter((r) => r.product_id && r.bags > 0 && r.kg > 0 && rowPrice(r))
+        .map((r) => ({ bags: r.bags, kg: r.kg, price: rowPrice(r) }));
       const cash = cashInput.getValue();
       return C.computeReceipt({ items, commissionRate: rate, porterFee: fee, cashAdvance: Number.isNaN(cash) ? 0 : cash || 0, porterDeducted, cashDeducted });
     }
@@ -149,9 +144,7 @@
         const el = rowEls[i];
         if (!el) return;
         const price = rowPrice(row);
-        UI.clear(el.priceCell);
         UI.clear(el.amountCell);
-        if (price !== null) el.priceCell.appendChild(document.createTextNode(C.formatMoney(price)));
         if (price !== null && row.kg > 0) el.amountCell.appendChild(document.createTextNode(C.formatMoney(C.computeReceipt({ items: [{ bags: 0, kg: row.kg, price }] }).totalAmount)));
       });
       const c = currentCalc();
@@ -179,34 +172,6 @@
         payableBox.appendChild(h('div', { class: 's', style: { marginTop: '8px', color: '#ffd6d1', fontWeight: 700 } },
           'Elden ve kesintiler toplam tutardan büyük; fiş bu hâliyle kaydedilemez.'));
       }
-      drawPriceBox();
-    }
-
-    function drawPriceBox() {
-      const used = [];
-      const seen = new Set();
-      for (const r of state.rows) {
-        if (!r.product_id || seen.has(r.product_id)) continue;
-        seen.add(r.product_id);
-        const p = productById(r.product_id);
-        if (p) used.push({ p, kept: r.orig_price !== undefined && r.orig_price !== null && Number(r.product_id) === r.orig_product, price: rowPrice(r) });
-      }
-      const stale = used.some((u) => !u.kept && u.p.price_stale);
-      priceBox.className = 'price-check' + (!stale && used.length ? ' ok' : '');
-      UI.clear(priceBox);
-      priceBox.appendChild(h('h3', null, icon(stale ? 'alert' : 'tag', 20), 'Fiyat kontrolü'));
-      if (!used.length) {
-        priceBox.appendChild(h('p', { class: 'muted' }, 'Ürün seçtiğinizde fiyatları burada görürsünüz.'));
-      } else {
-        priceBox.appendChild(h('ul', { class: 'price-list' }, used.map((u) => h('li', null,
-          h('div', null, h('b', null, u.p.name), ' ', C.formatMoney(u.price, true), '/kg',
-            h('div', { class: u.kept ? 'muted' : (u.p.price_stale ? 'old' : 'muted'), style: { fontSize: '.8rem' } },
-              u.kept ? 'Fişteki eski fiyat korunuyor' : (u.p.price_stale ? 'Fiyat ' + (u.p.price_age_days === Infinity ? 'hiç' : u.p.price_age_days + ' gündür') + ' güncellenmedi!' : 'Bugün güncellendi'))),
-          u.kept ? null : btn('Güncelle', { small: true, onClick: async () => {
-            if (await Dialogs.priceUpdate(u.p)) { await loadProducts(); recalc(); }
-          } })))));
-      }
-      priceBox.appendChild(h('label', { class: 'check' }, confirmBox, h('span', null, 'Fiyatlar güncel, kontrol ettim.')));
     }
 
     // ---------- klavye: Enter ile sonraki kutuya ----------
@@ -221,7 +186,7 @@
     // ---------- kaydet ----------
     function isDirty() {
       if (editing) return true;
-      return !!state.customer || state.rows.some((r) => r.product_id || r.bags || r.kg) || !!cashInput.value.trim();
+      return !!state.customer || state.rows.some((r) => r.product_id || r.bags || r.kg || r.price) || !!cashInput.value.trim();
     }
     App.setLeaveGuard(isDirty);
 
@@ -232,19 +197,18 @@
         toast('Hatalı yazılmış bir sayı var. Kırmızı kutuyu düzeltin.', 'error');
         return;
       }
-      if (!state.confirmed) {
-        toast('Kaydetmeden önce fiyatları kontrol edip "Fiyatlar güncel" kutusunu işaretleyin.', 'error');
-        priceBox.scrollIntoView({ block: 'center' });
+      const noPrice = state.rows.findIndex((r) => (r.product_id || r.bags || r.kg) && !rowPrice(r));
+      if (noPrice >= 0) {
+        toast((noPrice + 1) + '. satıra kg fiyatını yazın.', 'error');
+        rowEls[noPrice].tr.querySelectorAll('input')[2].focus();
         return;
       }
       const cash = cashInput.getValue() || 0;
       const payload = {
         customer_id: state.customer.id,
-        priceConfirmed: true,
         cash_advance: cash,
-        items: state.rows.filter((r) => r.product_id || r.bags || r.kg).map((r) => ({
-          product_id: r.product_id, bags: r.bags, kg: r.kg,
-          orig_price: r.orig_price !== undefined && Number(r.product_id) === r.orig_product ? r.orig_price : undefined,
+        items: state.rows.filter((r) => r.product_id || r.bags || r.kg || r.price).map((r) => ({
+          product_id: r.product_id, bags: r.bags, kg: r.kg, price: r.price,
         })),
       };
       let id;
@@ -271,7 +235,7 @@
     // ---------- düzen ----------
     const now = C.nowLocal();
     const addRowBtn = btn('Satır ekle', { small: true, kind: 'ghost', icon: 'plus', onClick: () => {
-      state.rows.push({ product_id: null, bags: null, kg: null });
+      state.rows.push({ product_id: null, bags: null, kg: null, price: null });
       drawRows();
       rowEls[state.rows.length - 1].sel.focus();
     } });
@@ -291,7 +255,7 @@
       custInfo,
       tableEl,
       h('div', { class: 'paper-foot' },
-        h('span', { class: 'muted', style: { fontSize: '.88rem' } }, 'Kağıda 7 satır sığar; fazlası ikinci sayfaya geçer. Enter tuşu sonraki kutuya geçer.'),
+        h('span', { class: 'muted', style: { fontSize: '.88rem' } }, 'Fiyatı her satıra elle yazın (TL / kg). Kağıda 7 satır sığar; fazlası ikinci sayfaya geçer. Enter tuşu sonraki kutuya geçer.'),
         addRowBtn));
 
     const side = h('div', { class: 'side-panel' },
@@ -299,7 +263,6 @@
       editing
         ? h('div', { class: 'card' }, h('h3', null, 'Ödeme'), h('p', { class: 'muted' }, 'Ödemeler fiş sayfasından eklenir veya silinir. Bu fişe şimdiye kadar ' + C.formatMoney(editing.paid, true) + ' ödendi.'))
         : h('div', { class: 'card' }, h('h3', { style: { marginBottom: '10px' } }, 'Ödeme durumu'), paySeg, h('div', { style: { height: '12px' } }), partialField),
-      priceBox,
       h('div', { class: 'card', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
         btn(editing ? 'Düzeltmeyi kaydet' : 'Kaydet', { kind: 'primary', big: true, icon: 'save', onClick: () => save(null) }),
         editing ? null : h('div', { class: 'btn-stack' },
@@ -327,7 +290,7 @@
       'Son kayıt: ' + C.formatDateTime(c.latest) + ', bilgisayarın saati: ' + C.formatDateTime(c.now) + '. ' +
       'Bu hâlde kesilen fişler yanlış tarihle ve yanlış ay klasörüne kaydedilir. Windows\'ta Ayarlar → Saat ve dil → Tarih ve saat bölümünden düzeltin.')))(clock));
     if (!products.length) {
-      notices.push(h('div', { class: 'notice warn' }, icon('alert', 22), h('div', { class: 'grow' }, 'Henüz ürün eklenmemiş. Fiş kesmek için önce ürün ve fiyat ekleyin.'),
+      notices.push(h('div', { class: 'notice warn' }, icon('alert', 22), h('div', { class: 'grow' }, 'Henüz ürün eklenmemiş. Fiş kesmek için önce ürünleri (cinsleri) ekleyin.'),
         btn('Ürünlere git', { kind: 'primary', onClick: () => { App.setLeaveGuard(null); App.go('#/urunler'); } })));
     }
 

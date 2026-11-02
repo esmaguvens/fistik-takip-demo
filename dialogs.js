@@ -2,7 +2,7 @@
 'use strict';
 
 window.Dialogs = (() => {
-  const { h, field, numberInput, toast, modal, money } = UI;
+  const { h, btn, field, numberInput, toast, modal, money } = UI;
   const C = window.Calc;
 
   // Yeni müşteri / müşteri düzenle. Dönüş: müşteri id veya null
@@ -47,36 +47,6 @@ window.Dialogs = (() => {
               toast(existing ? 'Müşteri güncellendi.' : 'Müşteri eklendi.');
               return id;
             }
-          },
-        },
-      ],
-    });
-  }
-
-  // Fiyat güncelle / aynı fiyatı onayla. Dönüş: true / null
-  function priceUpdate(p) {
-    const input = numberInput({ kind: 'money', value: p.price });
-    return modal({
-      title: p.name + ' — fiyat',
-      body: h('div', null,
-        h('div', { class: 'kv', style: { marginBottom: '16px' } },
-          h('div', { class: 'k' }, 'Şu anki fiyat'), h('div', { class: 'v' }, money(p.price), ' / kg'),
-          h('div', { class: 'k' }, 'Son güncelleme'), h('div', { class: 'v' }, C.formatDateTime(p.price_updated_at))),
-        field('Yeni kg fiyatı (TL)', input, 'Fiyat değişmediyse "Fiyat aynı" düğmesine basın; bugünün fiyatı olarak onaylanır.')),
-      actions: [
-        { label: 'Vazgeç', value: null },
-        {
-          label: 'Fiyat aynı', icon: 'check',
-          onClick: async () => { await UI.api('updatePrice', p.id, p.price); toast(p.name + ' fiyatı onaylandı.'); return true; },
-        },
-        {
-          label: 'Kaydet', kind: 'primary',
-          onClick: async () => {
-            const v = input.getValue();
-            if (!v || Number.isNaN(v)) { toast('Geçerli bir fiyat yazın.', 'error'); return false; }
-            await UI.api('updatePrice', p.id, v);
-            toast(p.name + ' fiyatı güncellendi: ' + C.formatMoney(v, true));
-            return true;
           },
         },
       ],
@@ -167,13 +137,15 @@ window.Dialogs = (() => {
   }
 
   // Yazdırmadan önce kâğıt ve yazıcı seçimi. Son seçim hatırlanır.
-  // Dönüş: { layout: 'a5' | 'a4' | 'a4x2', printer: ad | null, printerLabel, dialog } veya null (vazgeçildi)
+  // Dönüş: { layout: 'a5' | 'a4' | 'a4x2', printer: ad | null, printerLabel, copies, dialog } veya null (vazgeçildi)
   const PRINT_KEY = 'fh-yazdirma';
+  const MAX_COPIES = 20;
+  const clampCopies = (n) => Math.min(MAX_COPIES, Math.max(1, Math.round(Number(n)) || 1));
   function loadPrintPrefs() {
     try {
       const v = JSON.parse(localStorage.getItem(PRINT_KEY) || '{}');
-      return { layout: ['a5', 'a4', 'a4x2'].includes(v.layout) ? v.layout : 'a4', printer: v.printer || null };
-    } catch (e) { return { layout: 'a4', printer: null }; }
+      return { layout: ['a5', 'a4', 'a4x2'].includes(v.layout) ? v.layout : 'a4', printer: v.printer || null, copies: clampCopies(v.copies) };
+    } catch (e) { return { layout: 'a4', printer: null, copies: 1 }; }
   }
 
   async function printOptions(receiptId) {
@@ -189,6 +161,13 @@ window.Dialogs = (() => {
     const hint = h('p', { class: 'muted', style: { fontSize: '.88rem', margin: '4px 0 12px' } });
     const printerSel = h('select', null, printers.map((p) => h('option', { value: p.name, selected: !!pick && p.name === pick.name }, p.displayName)));
     const winDialog = h('input', { type: 'checkbox' });
+    const copiesInput = h('input', { type: 'text', inputmode: 'numeric', value: String(prefs.copies), style: { width: '70px', textAlign: 'center', fontWeight: 700 } });
+    const stepCopies = (d) => { copiesInput.value = String(clampCopies(clampCopies(copiesInput.value) + d)); };
+    copiesInput.addEventListener('change', () => stepCopies(0));
+    const copiesBox = h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+      btn('−', { title: 'Azalt', onClick: () => stepCopies(-1) }), copiesInput,
+      btn('+', { title: 'Artır', onClick: () => stepCopies(1) }),
+      h('span', { class: 'muted', style: { fontSize: '.88rem' } }, 'kopya'));
     const HINTS = {
       a4: 'Tepsiye A4 kâğıt koyun. Fiş A4 sayfayı kaplayacak şekilde büyütülür.',
       a5: 'Tepsiye A5 kâğıt dik olarak yerleştirin. Fiş A5 sayfayı kaplar.',
@@ -204,8 +183,9 @@ window.Dialogs = (() => {
     draw();
     const body = h('div', null, group('Kâğıt', paperSeg), hint,
       printers.length ? group('Yazıcı', printerSel) : null,
+      printers.length ? group('Kopya sayısı', copiesBox) : null,
       printers.length ? h('label', { class: 'check', style: { fontWeight: 500, fontSize: '.9rem' } }, winDialog,
-        h('span', null, 'Windows yazdırma penceresini de aç (kopya sayısı vb. için). O pencerede kâğıt boyutunu ayrıca seçmeniz gerekir.')) : null);
+        h('span', null, 'Windows yazdırma penceresini de aç (genelde gerekmez). O pencerede başka yazıcı seçerseniz kâğıt boyutunu orada ayrıca seçin.')) : null);
     return modal({
       title: 'Fiş ' + receiptId + ' — yazdır',
       body,
@@ -215,9 +195,10 @@ window.Dialogs = (() => {
           label: 'Yazdır', kind: 'primary', icon: 'print',
           onClick: () => {
             const printer = printers.length ? printerSel.value : null;
-            try { localStorage.setItem(PRINT_KEY, JSON.stringify({ layout, printer })); } catch (e) { /* yoksay */ }
+            const copies = clampCopies(copiesInput.value);
+            try { localStorage.setItem(PRINT_KEY, JSON.stringify({ layout, printer, copies })); } catch (e) { /* yoksay */ }
             const chosen = printers.find((p) => p.name === printer);
-            return { layout, printer, printerLabel: chosen ? chosen.displayName : '', dialog: !printers.length || winDialog.checked };
+            return { layout, printer, printerLabel: chosen ? chosen.displayName : '', copies, dialog: !printers.length || winDialog.checked };
           },
         },
       ],
@@ -228,14 +209,14 @@ window.Dialogs = (() => {
   async function printReceipt(id) {
     const o = await printOptions(id);
     if (!o) return null;
-    const res = await UI.api('printReceipt', id, { layout: o.layout, printer: o.dialog ? null : o.printer });
+    const res = await UI.api('printReceipt', id, { layout: o.layout, printer: o.printer || null, copies: o.copies || 1, dialog: !!o.dialog });
     if (res && res.printed === false) {
       if (/cancel/i.test(res.reason || '')) return res;
       throw new Error('Fiş yazdırılamadı' + (res.reason ? ' (' + res.reason + ')' : '') + '. Yazıcının açık ve bağlı olduğunu, tepside kâğıt bulunduğunu kontrol edin.');
     }
-    if (!o.dialog) toast('Fiş yazıcıya gönderildi' + (o.printerLabel ? ': ' + o.printerLabel : '') + '.');
+    if (!o.dialog) toast('Fiş yazıcıya gönderildi' + (o.copies > 1 ? ' (' + o.copies + ' kopya)' : '') + (o.printerLabel ? ': ' + o.printerLabel : '') + '.');
     return res;
   }
 
-  return { customerForm, priceUpdate, addPayment, accountEntry, printOptions, printReceipt };
+  return { customerForm, addPayment, accountEntry, printOptions, printReceipt };
 })();

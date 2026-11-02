@@ -306,12 +306,13 @@ const DEFAULT_SETTINGS = {
   company_name: Calc.COMPANY_NAME,
   commission_rate: '2',
   porter_fee: '2000', // kuruş: 20,00 TL
-  price_warn_days: '1',
   auto_lock_minutes: '15',
   docs_dir: '',
   backup_dir: '',
 };
 const PUBLIC_SETTINGS = Object.keys(DEFAULT_SETTINGS);
+// Fiş satırındaki kg fiyatı için akla yatkın üst sınır (yanlışlıkla fazladan sıfır yazılmasına karşı): 100.000 TL
+const MAX_PRICE = 10000000;
 
 // Bir fişe yapılmış (silinmemiş) ödemelerin toplamı. Fiş tablosu 'r' takma adıyla kullanılır.
 const PAID_SQL = '(SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.receipt_id = r.id AND p.deleted_at IS NULL)';
@@ -433,7 +434,6 @@ class Service {
       company_name: out.company_name,
       commission_rate: Number(out.commission_rate),
       porter_fee: Number(out.porter_fee),
-      price_warn_days: Number(out.price_warn_days),
       auto_lock_minutes: Number(out.auto_lock_minutes),
       docs_dir: out.docs_dir || '',
       backup_dir: out.backup_dir || '',
@@ -455,11 +455,6 @@ class Service {
       const v = Math.round(Number(input.porter_fee));
       need(Number.isFinite(v) && v >= 0, 'Hamallık ücreti geçersiz.');
       next.porter_fee = v;
-    }
-    if (input.price_warn_days !== undefined) {
-      const v = Math.round(Number(input.price_warn_days));
-      need(v >= 1 && v <= 60, 'Fiyat uyarı süresi 1 ile 60 gün arasında olmalı.');
-      next.price_warn_days = v;
     }
     if (input.auto_lock_minutes !== undefined) {
       const v = Math.round(Number(input.auto_lock_minutes));
@@ -530,17 +525,14 @@ class Service {
   // ---------- ürünler ----------
   listProducts(opts) {
     opts = opts || {};
-    const rows = this.all('SELECT * FROM products' + (opts.includeDeleted ? '' : ' WHERE deleted_at IS NULL'));
-    const warnDays = Number(this.getSetting('price_warn_days')) || 1;
-    const today = Calc.todayLocal();
-    return rows
+    // Ürünlerin kayıtlı fiyatı yoktur (1.0.13'ten itibaren); fiyat her fişte satır satır elle yazılır.
+    return this.all('SELECT id, name, stock, created_at, deleted_at FROM products' + (opts.includeDeleted ? '' : ' WHERE deleted_at IS NULL'))
       .filter((p) => Calc.matches(p.name, opts.q))
-      .map((p) => Object.assign(p, { price_age_days: Calc.daysSince(p.price_updated_at, today), price_stale: Calc.daysSince(p.price_updated_at, today) >= warnDays }))
       .sort(byName);
   }
 
   getProduct(id) {
-    const p = this.get('SELECT * FROM products WHERE id=?', [id]);
+    const p = this.get('SELECT id, name, stock, created_at, deleted_at FROM products WHERE id=?', [id]);
     need(p, 'Ürün bulunamadı.');
     return p;
   }
@@ -555,17 +547,14 @@ class Service {
   addProduct(input) {
     const name = cleanText(input.name, 60);
     need(name, 'Ürün adı yazın.');
-    const price = Math.round(Number(input.price));
-    need(Number.isFinite(price) && price > 0, 'Fiyat 0\'dan büyük olmalı.');
     const stock = Math.round(Number(input.stock) || 0);
     need(stock >= 0, 'Stok eksi olamaz.');
     this.assertUniqueProductName(name);
     return this.tx(() => {
       const at = this.now();
-      const id = this.run('INSERT INTO products(name, price, price_updated_at, stock, created_at) VALUES (?,?,?,?,?)', [name, price, at, stock, at]);
-      this.run('INSERT INTO price_history(product_id, old_price, new_price, at) VALUES (?,?,?,?)', [id, null, price, at]);
+      const id = this.run('INSERT INTO products(name, stock, created_at) VALUES (?,?,?)', [name, stock, at]);
       if (stock) this.run('INSERT INTO stock_movements(product_id, change, stock_after, type, note, at) VALUES (?,?,?,?,?,?)', [id, stock, stock, 'acilis', 'Başlangıç stoğu', at]);
-      this.audit('urun_eklendi', 'urun', id, `Ürün eklendi: ${name} (${Calc.formatMoney(price, true)}/kg, stok ${stock} çuval)`, null, { name, price, stock });
+      this.audit('urun_eklendi', 'urun', id, `Ürün eklendi: ${name} (stok ${stock} çuval)`, null, { name, stock });
       return id;
     });
   }
@@ -583,28 +572,6 @@ class Service {
     });
   }
 
-  updatePrice(id, newPrice) {
-    const p = this.getProduct(id);
-    need(!p.deleted_at, 'Silinmiş ürünün fiyatı değiştirilemez.');
-    const price = Math.round(Number(newPrice));
-    need(Number.isFinite(price) && price > 0, 'Fiyat 0\'dan büyük olmalı.');
-    return this.tx(() => {
-      const at = this.now();
-      this.run('UPDATE products SET price=?, price_updated_at=? WHERE id=?', [price, at, id]);
-      this.run('INSERT INTO price_history(product_id, old_price, new_price, at) VALUES (?,?,?,?)', [id, p.price, price, at]);
-      const same = price === p.price;
-      this.audit('fiyat_guncellendi', 'urun', id,
-        same ? `${p.name} fiyatı onaylandı: ${Calc.formatMoney(price, true)}/kg`
-          : `${p.name} fiyatı: ${Calc.formatMoney(p.price, true)} → ${Calc.formatMoney(price, true)}/kg`,
-        { price: p.price }, { price });
-      return id;
-    });
-  }
-
-  priceHistory(id) {
-    return this.all('SELECT * FROM price_history WHERE product_id=? ORDER BY id DESC LIMIT 100', [id]);
-  }
-
   adjustStock(id, input) {
     const p = this.getProduct(id);
     need(!p.deleted_at, 'Silinmiş ürünün stoğu değiştirilemez.');
@@ -620,6 +587,13 @@ class Service {
       this.audit('stok_duzeltildi', 'urun', id, `${p.name} stoğu elle değişti: ${p.stock} → ${newStock} çuval`, { stock: p.stock }, { stock: newStock }, reason);
       return id;
     });
+  }
+
+  // Ürünün fişlere yazılmış son fiyatları (iptal edilen fişler hariç)
+  productPrices(id, limit) {
+    return this.all(`SELECT r.id AS receipt_id, r.created_at, i.price, i.kg, i.bags
+      FROM receipt_items i JOIN receipts r ON r.id = i.receipt_id
+      WHERE i.product_id = ? AND r.cancelled_at IS NULL ORDER BY r.id DESC, i.line_no LIMIT ?`, [id, Math.min(200, Number(limit) || 30)]);
   }
 
   deleteProduct(id, reason) {
@@ -833,16 +807,14 @@ class Service {
     return r;
   }
 
-  // items: [{ product_id, bags, kg, orig_price? }]
+  // items: [{ product_id, bags, kg, price }]  (price: kuruş / kg, fişe elle yazılır)
   buildReceipt(input, original) {
     const customer = this.getCustomerRow(Number(input.customer_id));
     if (!original || original.customer_id !== customer.id) need(!customer.deleted_at, 'Bu müşteri silinmiş.');
-    need(input.priceConfirmed === true, 'Kaydetmeden önce fiyatların güncel olduğunu onaylayın.');
     const raw = (input.items || []).filter((it) => it && (it.product_id || it.bags || it.kg));
     need(raw.length > 0, 'Fişe en az bir ürün satırı girin.');
     need(raw.length <= 50, 'Bir fişe en fazla 50 satır girilebilir.');
-    const origPrices = {};
-    if (original) for (const it of original.items) (origPrices[it.product_id] = origPrices[it.product_id] || []).push(it.price);
+    const origProducts = new Set(original ? original.items.map((it) => it.product_id) : []);
     const items = raw.map((it, i) => {
       const row = i + 1;
       need(it.product_id, `${row}. satırda ürün (cinsi) seçin.`);
@@ -851,14 +823,12 @@ class Service {
       const kg = Number(it.kg);
       need(Number.isInteger(bags) && bags > 0, `${row}. satırda adet (çuval) tam sayı ve 0'dan büyük olmalı.`);
       need(Number.isFinite(kg) && kg > 0, `${row}. satırda KG 0'dan büyük olmalı.`);
-      let price = p.price;
-      if (original && it.orig_price !== undefined && it.orig_price !== null) {
-        need((origPrices[p.id] || []).includes(Number(it.orig_price)), `${row}. satırın fiyatı geçersiz.`);
-        price = Number(it.orig_price);
-      } else {
-        need(!p.deleted_at, `${row}. satırdaki ürün (${p.name}) silinmiş.`);
-      }
-      return { product_id: p.id, product_name: p.name, bags, kg: Calc.roundKg(kg), price };
+      const price = Number(it.price);
+      need(Number.isFinite(price) && price > 0, `${row}. satıra fiyat yazın (${p.name}).`);
+      need(price <= MAX_PRICE, `${row}. satırdaki fiyat çok yüksek: ${Calc.formatMoney(price, true)}/kg. Kontrol edin.`);
+      // Silinmiş ürün yalnızca düzeltilen fişte zaten varsa kalabilir.
+      need(!p.deleted_at || origProducts.has(p.id), `${row}. satırdaki ürün (${p.name}) silinmiş.`);
+      return { product_id: p.id, product_name: p.name, bags, kg: Calc.roundKg(kg), price: Math.round(price) };
     });
     const cash = Math.round(Number(input.cash_advance) || 0);
     need(cash >= 0, 'Elden tutarı eksi olamaz.');
@@ -1144,7 +1114,6 @@ class Service {
       open_count: open.n,
       open_amount: open.v,
       they_owe: theyOwe,
-      stale_products: products.filter((p) => p.price_stale).map((p) => ({ id: p.id, name: p.name, price_updated_at: p.price_updated_at })),
       product_count: products.length,
       customer_count: this.get('SELECT COUNT(*) AS n FROM customers WHERE deleted_at IS NULL').n,
       last_receipt_id: last ? last.id : null,
@@ -1182,8 +1151,8 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
 })(module, module.exports, __require); return module.exports; })();
 
   // ---------- demo durumu ----------
-  const VERSION = '1.0.12';
-  const STORE_KEY = 'fh-demo-db-v3'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
+  const VERSION = '1.0.14';
+  const STORE_KEY = 'fh-demo-db-v4'; // veri kuralı değişince artırılır; ziyaretçiler yeni örnek verilerle başlar
   const DEMO_PIN = '1234';
   const Calc = window.Calc;
   let service = null;
@@ -1216,14 +1185,14 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     };
     const realNow = s.now;
     const at = (offset, time) => { s.now = () => day(offset) + ' ' + time + ':00'; };
-    const fis = (customer, items, extra) => s.createReceipt(Object.assign({ customer_id: customer, priceConfirmed: true, items }, extra || {}));
+    const fis = (customer, items, extra) => s.createReceipt(Object.assign({ customer_id: customer, items }, extra || {}));
 
     at(-6, '08:10');
     s.setPin(DEMO_PIN, true);
-    const boz = s.addProduct({ name: 'Boz Fıstık', price: 28000, stock: 0 });
-    const kirmizi = s.addProduct({ name: 'Kırmızı', price: 30500, stock: 0 });
-    const siirt = s.addProduct({ name: 'Siirt', price: 33500, stock: 12 });
-    const ham = s.addProduct({ name: 'Ham (kabuklu)', price: 25000, stock: 0 });
+    const boz = s.addProduct({ name: 'Boz Fıstık', stock: 0 });
+    const kirmizi = s.addProduct({ name: 'Kırmızı', stock: 0 });
+    const siirt = s.addProduct({ name: 'Siirt', stock: 12 });
+    const ham = s.addProduct({ name: 'Ham (kabuklu)', stock: 0 });
     const mehmet = s.addCustomer({ first_name: 'Mehmet', last_name: 'Kaya', phone: '0500 000 00 01', address: 'Birecik' });
     const ali = s.addCustomer({ first_name: 'Ali', last_name: 'Demir', address: 'Halfeti' });
     const hasan = s.addCustomer({ first_name: 'Hasan', last_name: 'Çelik', address: 'Nizip' });
@@ -1234,37 +1203,35 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
     s.addAccountEntry(ibrahim, { type: 'acilis_borc', amount: 1250000, date: day(-6), note: 'Defterden aktarıldı' });
 
     at(-5, '10:20');
-    fis(mehmet, [{ product_id: boz, bags: 12, kg: 648 }, { product_id: kirmizi, bags: 6, kg: 310.5 }], { cash_advance: 1500000, payment: { mode: 'kismen', amount: 10000000 } });
+    fis(mehmet, [{ product_id: boz, bags: 12, kg: 648, price: 28500 }, { product_id: kirmizi, bags: 6, kg: 310.5, price: 31000 }], { cash_advance: 1500000, payment: { mode: 'kismen', amount: 10000000 } });
     at(-4, '11:45');
-    fis(ali, [{ product_id: siirt, bags: 20, kg: 1050 }], { payment: { mode: 'odendi' } });
+    fis(ali, [{ product_id: siirt, bags: 20, kg: 1050, price: 34000 }], { payment: { mode: 'odendi' } });
 
     at(-3, '08:25');
-    s.updatePrice(boz, 28300); s.updatePrice(kirmizi, 30800); s.updatePrice(siirt, 33800); s.updatePrice(ham, 25000);
     at(-3, '14:05');
-    const fHasan = fis(hasan, [{ product_id: boz, bags: 8, kg: 420 }]);
+    const fHasan = fis(hasan, [{ product_id: boz, bags: 8, kg: 420, price: 28500 }]);
 
     at(-2, '09:40');
-    const fMustafa = fis(mustafa, [{ product_id: ham, bags: 15, kg: 790 }, { product_id: boz, bags: 5, kg: 262.5 }], { cash_advance: 500000 });
+    const fMustafa = fis(mustafa, [{ product_id: ham, bags: 15, kg: 790, price: 25000 }, { product_id: boz, bags: 5, kg: 262.5, price: 28500 }], { cash_advance: 500000 });
     s.addAccountEntry(mehmet, { type: 'borc_ekle', amount: 1000000, date: day(-2), note: 'Fiş dışı borç verildi' });
     s.addAccountEntry(mehmet, { type: 'tahsilat', amount: 500000, date: day(-2), note: 'Borcunun bir kısmını ödedi' });
 
     at(-1, '09:15');
-    const fFatma = fis(fatma, [{ product_id: kirmizi, bags: 10, kg: 515 }]);
+    const fFatma = fis(fatma, [{ product_id: kirmizi, bags: 10, kg: 515, price: 31000 }]);
     s.addPayment(fFatma, { amount: 2500000, method: 'mahsup', note: 'Eski borcundan düşüldü' });
     s.addPayment(fMustafa, { amount: 5000000, method: 'nakit', note: 'Havale' });
     at(-1, '11:30');
-    fis(ibrahim, [{ product_id: siirt, bags: 6, kg: 318 }], { payment: { mode: 'odendi' } });
-    const fYanlis = fis(ali, [{ product_id: boz, bags: 3, kg: 150 }]);
+    fis(ibrahim, [{ product_id: siirt, bags: 6, kg: 318, price: 34000 }], { payment: { mode: 'odendi' } });
+    const fYanlis = fis(ali, [{ product_id: boz, bags: 3, kg: 150, price: 28500 }]);
     s.cancelReceipt(fYanlis, 'Yanlış müşteriye kesildi');
     at(-1, '16:40');
     s.adjustStock(siirt, { newStock: s.getProduct(siirt).stock - 10, reason: 'Satış: Antep\'e gönderildi' });
 
     at(0, '08:20');
-    s.updatePrice(boz, 28500); s.updatePrice(kirmizi, 31000); s.updatePrice(siirt, 34000); // Ham bilerek güncellenmedi: fiyat uyarısı görünsün
     at(0, '09:05');
-    fis(mehmet, [{ product_id: boz, bags: 9, kg: 486 }]);
+    fis(mehmet, [{ product_id: boz, bags: 9, kg: 486, price: 28500 }]);
     at(0, '10:30');
-    fis(hasan, [{ product_id: kirmizi, bags: 4, kg: 208 }], { payment: { mode: 'kismen', amount: 2000000 } });
+    fis(hasan, [{ product_id: kirmizi, bags: 4, kg: 208, price: 31000 }], { payment: { mode: 'kismen', amount: 2000000 } });
     s.addPayment(fHasan, { amount: 6000000, method: 'nakit', note: '' });
 
     s.now = realNow;
@@ -1329,7 +1296,7 @@ module.exports = { Service, DEFAULT_SETTINGS, fullName };
   };
 
   const SERVICE_METHODS = new Set([
-    'listProducts', 'getProduct', 'addProduct', 'renameProduct', 'updatePrice', 'priceHistory', 'adjustStock', 'deleteProduct',
+    'listProducts', 'getProduct', 'addProduct', 'renameProduct', 'productPrices', 'adjustStock', 'deleteProduct',
     'listCustomers', 'getCustomer', 'addCustomer', 'updateCustomer', 'deleteCustomer', 'addAccountEntry', 'deleteAccountEntry',
     'listReceipts', 'getReceipt', 'createReceipt', 'updateReceipt', 'cancelReceipt', 'addPayment', 'deletePayment',
     'stockMovements', 'listAudit', 'verifyAudit', 'dashboard', 'getSettings', 'saveSettings', 'clockCheck', 'commissionReport',

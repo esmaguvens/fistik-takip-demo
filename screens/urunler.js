@@ -1,27 +1,24 @@
-// Ürünler (cinsler): fiyat, fiyat güncelliği, stok.
+// Ürünler (cinsler) ve stok. Ürünlerin kayıtlı fiyatı yoktur; fiyat her fişe elle yazılır.
 'use strict';
 
 (() => {
-  const { h, icon, btn, money, field, numberInput, toast } = UI;
+  const { h, icon, btn, field, numberInput, toast } = UI;
   const C = window.Calc;
 
   function addProductDialog() {
     const name = h('input', { type: 'text', maxlength: 60, placeholder: 'Ör. Boz fıstık, Kırmızı, Siirt' });
-    const price = numberInput({ kind: 'money' });
     const stock = numberInput({ kind: 'int', value: 0 });
     return UI.modal({
       title: 'Yeni ürün',
-      body: h('div', null, field('Ürün adı (cinsi)', name), h('div', { class: 'row' }, field('Güncel kg fiyatı (TL)', price), field('Mevcut stok (çuval)', stock))),
+      body: h('div', null, field('Ürün adı (cinsi)', name), field('Mevcut stok (çuval)', stock, 'Fiyat ürüne kaydedilmez; her fişte elle yazılır.')),
       actions: [
         { label: 'Vazgeç', value: null },
         {
           label: 'Kaydet', kind: 'primary',
           onClick: async () => {
-            const p = price.getValue();
             const s = stock.getValue();
-            if (!p || Number.isNaN(p)) { toast('Geçerli bir fiyat yazın.', 'error'); return false; }
             if (Number.isNaN(s)) { toast('Stok tam sayı olmalı.', 'error'); return false; }
-            await UI.api('addProduct', { name: name.value, price: p, stock: s || 0 });
+            await UI.api('addProduct', { name: name.value, stock: s || 0 });
             toast('Ürün eklendi.');
             return true;
           },
@@ -55,15 +52,17 @@
     });
   }
 
+  // Ürünün fişlere yazılmış son fiyatları (bilgi amaçlı)
   async function historyDialog(p) {
-    const rows = await UI.api('priceHistory', p.id);
+    const rows = await UI.api('productPrices', p.id, 30);
     return UI.modal({
-      title: p.name + ' — fiyat geçmişi',
+      title: p.name + ' — fişlerdeki son fiyatlar',
       body: UI.table([
-        { label: 'Tarih', render: (r) => C.formatDateTime(r.at) },
-        { label: 'Eski', align: 'right', render: (r) => (r.old_price === null ? '—' : C.formatMoney(r.old_price)) },
-        { label: 'Yeni', align: 'right', render: (r) => h('b', null, C.formatMoney(r.new_price)) },
-      ], rows, { compact: true }),
+        { label: 'Tarih', render: (r) => C.formatDateTime(r.created_at) },
+        { label: 'Fiş No', render: (r) => r.receipt_id },
+        { label: 'KG', align: 'right', render: (r) => C.formatKg(r.kg) },
+        { label: 'Fiyat (kg)', align: 'right', render: (r) => h('b', null, C.formatMoney(r.price)) },
+      ], rows, { compact: true, empty: 'Bu ürünle henüz fiş kesilmedi.' }),
       actions: [{ label: 'Kapat', kind: 'primary', value: true }],
     });
   }
@@ -84,7 +83,7 @@
             return true;
           },
         },
-        { label: 'Fiyat geçmişi', icon: 'history', onClick: async () => { await historyDialog(p); return false; } },
+        { label: 'Fişlerdeki fiyatlar', icon: 'history', onClick: async () => { await historyDialog(p); return false; } },
         {
           label: 'Adı kaydet', kind: 'primary',
           onClick: async () => { await UI.api('renameProduct', p.id, name.value); toast('Ürün adı değişti.'); return true; },
@@ -96,38 +95,27 @@
   window.Screens.urunler = async function () {
     const holder = h('div');
     const search = h('input', { type: 'text', placeholder: 'Ürün adı ile ara…', autofocus: true });
-    const warn = h('div');
 
     async function load() {
       const rows = await UI.api('listProducts', { q: search.value });
-      const stale = rows.filter((p) => p.price_stale);
-      UI.clear(warn);
-      if (stale.length) {
-        warn.appendChild(h('div', { class: 'notice warn' }, icon('alert', 22), h('div', { class: 'grow' },
-          h('b', null, stale.length + ' ürünün fiyatı bugün kontrol edilmedi. '),
-          'Fiyat değişmediyse "Fiyat" düğmesine basıp "Fiyat aynı" deyin; fiyat bugünün fiyatı olarak onaylanır.')));
-      }
       const refresh = (fn) => async () => { try { if (await fn()) load(); } catch (e) { UI.showError(e); } };
       UI.clear(holder);
       holder.appendChild(UI.table([
         { label: 'Ürün (cinsi)', render: (p) => h('b', null, p.name) },
-        { label: 'Güncel fiyat', align: 'right', render: (p) => h('span', null, money(p.price), h('span', { class: 'muted' }, ' / kg')) },
-        { label: 'Fiyat durumu', render: (p) => UI.priceAge(p) },
         { label: 'Stok', align: 'right', render: (p) => h('span', { class: p.stock < 0 ? 'neg' : '' }, C.formatInt(p.stock) + ' çuval') },
         { label: '', render: (p) => h('div', { class: 'cell-actions' },
-          btn('Fiyat', { small: true, kind: p.price_stale ? 'primary' : '', icon: 'tag', onClick: refresh(() => Dialogs.priceUpdate(p)) }),
           btn('Stok', { small: true, icon: 'box', onClick: refresh(() => stockDialog(p)) }),
-          btn('', { small: true, kind: 'ghost', icon: 'edit', title: 'Ad değiştir / sil / fiyat geçmişi', onClick: refresh(() => moreMenu(p)) })) },
+          btn('', { small: true, kind: 'ghost', icon: 'edit', title: 'Ad değiştir / sil / fişlerdeki fiyatlar', onClick: refresh(() => moreMenu(p)) })) },
       ], rows, { empty: search.value ? 'Bu aramaya uyan ürün yok.' : 'Henüz ürün eklenmedi. "Yeni ürün" ile başlayın.' }));
     }
 
     search.addEventListener('input', UI.debounce(load, 200));
     await load();
 
-    return UI.page('Ürünler ve Fiyatlar', [btn('Yeni ürün', { kind: 'primary', icon: 'plus', onClick: async () => { if (await addProductDialog()) load(); } })],
+    return UI.page('Ürünler', [btn('Yeni ürün', { kind: 'primary', icon: 'plus', onClick: async () => { if (await addProductDialog()) load(); } })],
       h('div', { class: 'filters' }, h('div', { class: 'searchbar' }, icon('search', 18), search)),
-      warn, holder,
-      h('p', { class: 'muted', style: { marginTop: '14px' } }, 'Fiyatlar yalnızca bu sayfadan değişir. Fiyat değişince eski fişler değişmez; yeni fişler güncel fiyatla kesilir.'));
+      holder,
+      h('p', { class: 'muted', style: { marginTop: '14px' } }, 'Ürünlerin fiyatı kaydedilmez. Fiyat, her fiş kesilirken satır satır elle yazılır.'));
   };
 
   window.ProductDialogs = { stockDialog };

@@ -14,15 +14,9 @@ window.Screens.home = async function () {
       h('b', null, 'Bilgisayarın tarihi veya saati geri gitmiş görünüyor. '),
       'Son kayıt: ' + C.formatDateTime(c.latest) + ', bilgisayarın saati: ' + C.formatDateTime(c.now) + '. ' +
       'Bu hâlde kesilen fişler yanlış tarihle ve yanlış ay klasörüne kaydedilir. Windows\'ta Ayarlar → Saat ve dil → Tarih ve saat bölümünden düzeltin.')))(d.clock));
-  if (d.stale_products.length) {
-    notices.push(h('div', { class: 'notice warn' }, icon('alert', 24),
-      h('div', { class: 'grow' }, h('b', null, 'Fiyat kontrolü: '), 'Şu ürünlerin fiyatı bugün güncellenmedi: ',
-        h('b', null, d.stale_products.map((p) => p.name).join(', ')), '.'),
-      btn('Fiyatları kontrol et', { kind: 'primary', onClick: () => App.go('#/urunler') })));
-  }
   if (!d.product_count) {
     notices.push(h('div', { class: 'notice info' }, icon('tag', 24),
-      h('div', { class: 'grow' }, h('b', null, 'Başlarken: '), 'Fiş kesebilmek için önce ürünleri (cinsleri) ve güncel fiyatlarını ekleyin.'),
+      h('div', { class: 'grow' }, h('b', null, 'Başlarken: '), 'Fiş kesebilmek için önce ürünleri (cinsleri) ekleyin. Fiyatlar her fişte elle yazılır.'),
       btn('Ürün ekle', { kind: 'primary', onClick: () => App.go('#/urunler') })));
   }
   if (!bs.external_dir) {
@@ -44,7 +38,7 @@ window.Screens.home = async function () {
       tile('main', 'plus', 'Yeni Fiş Kes', 'Üreticiden alım fişi', '#/fis/yeni'),
       tile('', 'receipt', 'Fişler', 'Geçmiş fişler, ödemeler', '#/fisler'),
       tile('', 'users', 'Müşteriler', 'Üreticiler, borç-alacak', '#/musteriler'),
-      tile('', 'tag', 'Ürünler ve Fiyatlar', 'Fiyat güncelle, stok', '#/urunler')),
+      tile('', 'tag', 'Ürünler', 'Cinsler ve stok', '#/urunler')),
     h('div', { class: 'cards' },
       h('div', { class: 'stat' }, h('div', { class: 'k' }, 'Bugün kesilen fiş'), h('div', { class: 'v' }, C.formatInt(d.today_count)),
         h('div', { class: 's' }, C.formatInt(d.today_bags) + ' çuval')),
